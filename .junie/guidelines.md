@@ -1,12 +1,6 @@
-Here is a **new, tailored version** of the Junie guidelines, specifically rewritten and adapted for the **agent-forge** project (https://github.com/ericsmith66/agent-forge).
-
-This version removes all references to the previous/nextgen-plaid context (e.g., net worth components, Plaid integration) and replaces them with agent-forge-specific rules. It preserves the strong safety rails, communication discipline, and Rails conventions while adding explicit support for our meta-agent system: self-improvement loop, multiple LLM backends (Claude, Grok, Ollama), GitHub API usage, agent orchestration, and knowledge_base reliance.
-
-**Recommended file path**: `.junie/guidelines.md`  
-(Replace the existing file or create it if not yet present — commit with a message like "Adapt Junie guidelines for agent-forge meta-framework".)
-
-```markdown
 # Junie Guidelines — agent-forge
+
+Updated 2026-02-08: Added Git & Sub-Project Structure Rules.
 
 These are **project-specific operating rules** for Junie/AI assistants (Claude, Grok, Ollama, etc.) working in this repository.
 
@@ -38,7 +32,66 @@ agent-forge is the **meta-framework** that AI coding agents use to build and imp
 
 ---
 
-## 2) Critical communication rule (prevents loops)
+## 2) Git & Sub-Project Structure Rules
+
+All sub-projects managed by agent-forge live under the `projects/` directory (e.g. `projects/eureka-homekit-rebuild`, `projects/aider-desk-test`, etc.).
+
+### Rules:
+
+1. **Independent git repositories**  
+   - Every sub-project folder is its own independent git repository (has its own `.git/` directory).  
+   - Never nest git repositories inside agent-forge's root repo.  
+   - The parent agent-forge repository must **never** track files inside `projects/`.
+
+2. **Root .gitignore update**  
+   Add or update the following lines in the **root** `.gitignore` of agent-forge:
+   ```
+   # Ignore all sub-projects — they are separate git repositories
+   projects/*
+   !projects/.gitignore
+   !projects/README.md
+   ```
+   This prevents agent-forge from committing sub-project files accidentally.
+
+3. **Per-project .gitignore**  
+   - Each sub-project must have its own normal `.gitignore` (e.g. Rails default: ignore `tmp/`, `log/`, `vendor/`, `.env`, etc.).  
+   - Do not override or remove any standard Rails ignores.
+
+4. **Project creation / initialization**  
+   When creating a new sub-project (via chat command, UI, or agent action):
+   - Create the folder: `projects/<project-name>`
+   - Run inside it:
+     ```bash
+     git init
+     # Add at least one file (e.g. README.md)
+     echo "# <project-name> - Created by agent-forge" > README.md
+     git add README.md
+     git commit -m "Initial commit – created by agent-forge"
+     ```
+   - Optional: If GitHub integration is enabled, push to remote:
+     ```bash
+     gh repo create ericsmith66/<project-name> --private --source=. --remote=origin
+     git push -u origin main
+     ```
+
+5. **Safety rails for git operations**  
+   - **Never** run `git commit`, `git push`, `git add .`, or destructive git commands without explicit user confirmation (e.g. "/commit" command in chat).  
+   - **Never** modify the root agent-forge .gitignore or .git from inside a sub-project task.  
+   - When editing files in a sub-project, always operate within the projectDir scope.  
+   - Prefer AiderDesk / Aider for code changes — it handles git diffs and commits safely (preview mode only until approved).  
+   - Log all git-related actions in the task log and implementation status.
+
+6. **Existing projects (e.g. cloning eureka-homekit)**  
+   - Clone directly into projects/:
+     ```bash
+     cd projects
+     git clone https://github.com/ericsmith66/eureka-homekit.git eureka-homekit-rebuild
+     ```
+   - Do not use git submodules unless explicitly requested.
+
+---
+
+## 3) Critical communication rule (prevents loops)
 
 Junie sessions may show timeout/keep-alive prompts.
 
@@ -54,7 +107,7 @@ Junie sessions may show timeout/keep-alive prompts.
 
 ---
 
-## 3) Safety rails (protect the forge)
+## 4) Safety rails (protect the forge)
 
 ### Database safety (high priority)
 - **Never** run destructive DB commands without explicit human confirmation:
@@ -79,7 +132,7 @@ Junie sessions may show timeout/keep-alive prompts.
 
 ---
 
-## 4) Implementation conventions
+## 5) Implementation conventions
 
 ### Agent & orchestration patterns
 - Prefer explicit agent roles (Coder, Planner, Reviewer, Orchestrator).
@@ -102,7 +155,7 @@ Junie sessions may show timeout/keep-alive prompts.
 
 ---
 
-## 5) Testing expectations
+## 6) Testing expectations
 
 ### Default test stack
 - **Minitest** only (no RSpec unless requested).
@@ -123,7 +176,7 @@ Log test results in status trackers or task output.
 
 ---
 
-## 6) Documentation & knowledge base workflow
+## 7) Documentation & knowledge base workflow
 
 ### Always reference knowledge_base first
 - Read `knowledge_base/core-agent-instructions.md` on every major task.
@@ -143,13 +196,5 @@ Log test results in status trackers or task output.
 
 ---
 
-Last updated: [Insert commit date]  
+Last updated: 2026-02-08  
 Project: agent-forge — self-building AI agent framework
-```
-
-### Next Steps
-1. **Commit this file** to `.junie/guidelines.md` (or update the existing one).
-2. **Verify** the knowledge_base structure is set up (templates/, epics/, etc.) — if not, we can create an Epic for it.
-3. Once in place, all future Epics/PRDs will require agents to load **both** this file and `core-agent-instructions.md` at the start of every task.
-
-Does this version capture what you want? Any sections to expand (e.g., more on Ollama/local model handling, agent handoff protocols, error recovery)? Or shall we move to drafting **Epic 0: Initialize Guidelines & Knowledge Layer** to get the full structure committed? Let's keep forging! 🚀

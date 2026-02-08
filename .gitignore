@@ -26,5 +26,10 @@
 # Aider
 .aider*
 
+# Ignore all sub-projects — they are separate git repositories
+projects/*
+!projects/.gitignore
+!projects/README.md
+
 # Local env files
 .env*.local
