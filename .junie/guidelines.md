@@ -1,149 +1,155 @@
-# Junie Guidelines — `nextgen-plaid`
+Here is a **new, tailored version** of the Junie guidelines, specifically rewritten and adapted for the **agent-forge** project (https://github.com/ericsmith66/agent-forge).
 
-These guidelines are **project-specific operating rules** for Junie/AI assistants working in this repository.
+This version removes all references to the previous/nextgen-plaid context (e.g., net worth components, Plaid integration) and replaces them with agent-forge-specific rules. It preserves the strong safety rails, communication discipline, and Rails conventions while adding explicit support for our meta-agent system: self-improvement loop, multiple LLM backends (Claude, Grok, Ollama), GitHub API usage, agent orchestration, and knowledge_base reliance.
+
+**Recommended file path**: `.junie/guidelines.md`  
+(Replace the existing file or create it if not yet present — commit with a message like "Adapt Junie guidelines for agent-forge meta-framework".)
+
+```markdown
+# Junie Guidelines — agent-forge
+
+These are **project-specific operating rules** for Junie/AI assistants (Claude, Grok, Ollama, etc.) working in this repository.
 
 They are written to be:
 - **Actionable** (clear do/don’t)
-- **Safe** (avoid destructive commands)
-- **Consistent** (match repo conventions)
+- **Safe** (avoid destructive commands, repo corruption)
+- **Consistent** (match Rails + agent-forge conventions)
+
+agent-forge is the **meta-framework** that AI coding agents use to build and improve itself, then bootstrap other applications. Primary stack: Ruby on Rails 7+.
 
 ---
 
 ## 1) Repo overview (what this is)
 
-- Ruby on Rails application.
+- Ruby on Rails 7+ application (API + web for agent orchestration/dashboard).
 - UI work frequently uses:
-    - Hotwire/Turbo (`turbo_frame_tag`)
-    - ViewComponent (components under `app/components/...`)
-    - DaisyUI/Tailwind classes for styling.
-- Tests use **Minitest** (`test/`), including `ViewComponent::TestCase` and Capybara system tests.
-- Product docs live in `knowledge_base/` (Epics, PRDs, templates, task logs).
+  - Hotwire/Turbo (`turbo_frame_tag`, `turbo_stream`)
+  - ViewComponent (`app/components/agents/`, `app/components/shared/`)
+  - DaisyUI + Tailwind CSS for styling
+- Tests use **Minitest** (`test/` folder), including `ViewComponent::TestCase` and system tests with Capybara.
+- Persistent knowledge & planning live in `knowledge_base/`:
+  - `core-agent-instructions.md` (global agent rules)
+  - Templates for Epics/PRDs/status trackers
+  - Active epics, PRDs, implementation logs
+- Agents interact with repo via:
+  - Local file read/write
+  - Git operations (safe only)
+  - Future: GitHub API for PR creation/review
 
 ---
 
-## 2) Critical communication rule (prevents the “continue loop”)
+## 2) Critical communication rule (prevents loops)
 
-Junie sessions may show a **timeout/keep-alive prompt** asking the human to “continue.”
+Junie sessions may show timeout/keep-alive prompts.
 
 ### Interpretation rule
-- A bare message like `continue` (or similar) should be treated as **keep-alive only**.
-- **Do not** re-run tests, re-check status, or repeat progress updates just because of `continue`.
-- **If you have no task remaining** Post a **single explicit completion message**: STATUS: DONE — awaiting review (no commit yet) Then quit the task.
-
-### When work is complete
-When implementation is done and tests are green:
-1. Post a **single explicit completion message**:
-- `STATUS: DONE — awaiting review (no commit yet)`
-2. Then quit the task
-
+- A bare message like `continue` (or similar) is **keep-alive only**.
+- **Do not** re-run tests, re-check status, or repeat updates on bare `continue`.
+- When task is complete and no further action needed:
+  - Post **exactly once**:
+    ```
+    STATUS: DONE — awaiting review (no commit yet)
+    ```
+  - Then stop / quit the task.
 
 ---
 
-## 3) Safety rails (do not break the dev environment)
+## 3) Safety rails (protect the forge)
 
 ### Database safety (high priority)
-Development DB was previously dropped accidentally during testing.
+- **Never** run destructive DB commands without explicit human confirmation:
+  - `db:drop`, `db:reset`, `db:truncate`, `db:migrate:reset`, etc.
+- Prefer test environment scoping:
+  - `RAILS_ENV=test bin/rails db:migrate`
+  - `RAILS_ENV=test bin/rails test`
+- If a command could affect development DB, **ask first**.
 
-Rules:
-- **Never** run destructive DB commands without explicit user confirmation:
-    - `db:drop`, `db:reset`, `db:truncate`, `db:migrate:reset`, etc.
-- If you must run DB commands for tests, **always** scope to test:
-    - Prefer `RAILS_ENV=test bin/rails ...` when applicable.
-- If unsure which environment a command affects, **ask first**.
+### Git & repo safety
+- **Do not** `git commit`, `git push`, or generate commits/PRs unless explicitly instructed.
+- Avoid unrelated diffs (whitespace, formatting only).
+- When proposing code changes:
+  - Output full file paths + diffs
+  - Use clear commit message suggestions
+  - Wait for human approval before any git action.
 
-### Git safety
-- Do **not** commit unless the human explicitly asks.
-- Avoid generating unrelated diffs (e.g., newline-only changes) — keep PRD diffs focused.
+### LLM & agent safety
+- Never fabricate API keys, tokens, or credentials.
+- When switching LLMs (Claude → Grok → Ollama), log the switch and reason.
+- Do not run infinite agent loops without human oversight.
 
 ---
 
 ## 4) Implementation conventions
 
-### Components
-- Prefer ViewComponents for dashboard/widgets.
-- Mirror existing patterns in `app/components/net_worth/`.
-- Use defensive access for snapshot JSON:
-    - tolerate missing keys and empty arrays/hashes
-    - provide an empty-state UI instead of crashing
-    - log/report corrupt payloads (Sentry if present; fallback to `Rails.logger`).
+### Agent & orchestration patterns
+- Prefer explicit agent roles (Coder, Planner, Reviewer, Orchestrator).
+- Use `lib/agents/` or `app/services/agents/` for core logic.
+- Implement LLM dispatcher early (support Claude, Grok/xAI API, Ollama/local).
+- Use file-based memory first → later vector DB/Rails model for long-term recall.
+
+### Components & UI
+- Prefer ViewComponents for agent dashboards, task views, logs.
+- Mirror patterns in `app/components/` once established.
+- Defensive data handling: tolerate missing keys, empty states, log errors (`Rails.logger`).
 
 ### Styling
-- Use DaisyUI/Tailwind utility classes.
-- Mobile-first responsive layout.
+- DaisyUI + Tailwind utility classes.
+- Mobile-first responsive design.
 
 ### Accessibility
-- Provide meaningful headings/labels.
-- Use `aria-label` where helpful for stat cards/controls.
-- Provide non-visual fallback where appropriate (e.g., tables for charts).
+- Meaningful headings, labels, `aria-*` attributes.
+- Non-visual fallbacks for data-heavy views (tables alongside charts).
 
 ---
 
 ## 5) Testing expectations
 
 ### Default test stack
-- Use **Minitest** (do not introduce RSpec unless explicitly requested).
+- **Minitest** only (no RSpec unless requested).
 
 ### What to add
-- For new ViewComponents:
-    - Add a component unit test under `test/components/...`.
-- For wiring changes:
-    - Update/add an integration test under `test/integration/...`.
-    - Update/add smoke/system tests under `test/smoke/...` if appropriate.
+- New services/agents → unit tests (`test/services/`, `test/lib/`)
+- New ViewComponents → `test/components/...`
+- Integration/wiring → `test/integration/...`
+- End-to-end agent flows → system/smoke tests `test/system/`
 
 ### How to run
-- Prefer smallest relevant set first, then broaden.
-- Typical commands:
-    - `bin/rails test test/components/...`
-    - `bin/rails test test/integration/...`
-    - `bin/rails test test/smoke/...`
-    - `bin/rails test` (full suite)
+- Smallest relevant set first:
+  - `bin/rails test test/lib/agents/...`
+  - `bin/rails test test/components/...`
+  - Full suite only when needed: `bin/rails test`
 
---- 
-
-## 6) Documentation requirements (PRD workflow)
-
-### Use the Knowledge Base templates (start here)
-
-When creating new Epic/PRD docs, start from the templates under `knowledge_base/templates/` (based on `knowledge_base/epics/wip/NextGen/Epic-4`).
-
-- Epic overview: copy `knowledge_base/templates/0000-EPIC-OVERVIEW-template.md` into your epic directory and rename to `0000-overview-...md`.
-- Implementation status tracker: copy `knowledge_base/templates/0001-IMPLEMENTATION-STATUS-template.md` and rename to `0001-IMPLEMENTATION-STATUS.md`.
-- PRD: copy `knowledge_base/templates/PRD-template.md` and rename to `PRD-<epic>-<nn>-<slug>.md`.
-
-Keep epic docs together under:
-- `knowledge_base/epics/wip/<Program>/<Epic-N>/`
-
-Minimum expected set in an epic directory:
-- `0000-overview-...md`
-- `0001-IMPLEMENTATION-STATUS.md`
-- `PRD-<epic>-<nn>-<slug>.md` (one per PRD)
-
-When implementing a PRD that requires a Junie log:
-- Create/update a task log under `knowledge_base/prds-junie-log/`.
-- Record:
-    - files changed
-    - commands run
-    - tests run + results
-    - manual verification steps
-
-When tests are green:
-- Update `knowledge_base/epics/wip/.../0001-IMPLEMENTATION-STATUS.md` as required.
+Log test results in status trackers or task output.
 
 ---
 
-## 7) Output/interaction style
+## 6) Documentation & knowledge base workflow
 
-- Be concise and explicit.
-- When blocked or ambiguous, ask a direct question with options.
-- After finishing work, stop and wait for review instructions.
+### Always reference knowledge_base first
+- Read `knowledge_base/core-agent-instructions.md` on every major task.
+- Then `.junie/guidelines.md` (this file).
+- Then relevant Epic/PRD + `*-IMPLEMENTATION-STATUS.md`.
 
-## 8) Epic & PRD workflow
-- When I ask you to review a Epic or PRD responde with a file in the same directory as the file I asked you to review
-- Title the review document as <source-document>-feedback-V<1..N>.md
-- When reviewing, provide quesitons, suggestions, improvements and objections. I you provided objections or provide potential solutions
+### Use templates
+- Create new Epics/PRDs from `knowledge_base/templates/`
+  - Epic overview: `0000-EPIC-OVERVIEW-template.md`
+  - Status tracker: `0001-IMPLEMENTATION-STATUS-template.md`
+  - PRD: `PRD-template.md`
 
-## 9) Implementing Epic's and PRD's
-- consider the epic overview in the same directory
-- read the ####-IMPLEMENTATION-STATUS.md or create it if it does not exist
-- implement the epic or prd
-- at the end of the epic update  ####-IMPLEMENTATION-STATUS.md as necessary
+### Self-improvement rule
+- When improving agents, tools, or architecture:
+  - Also propose updates to this file, `core-agent-instructions.md`, or templates.
+  - Use the Epic/PRD → implementation → review loop.
+
+---
+
+Last updated: [Insert commit date]  
+Project: agent-forge — self-building AI agent framework
+```
+
+### Next Steps
+1. **Commit this file** to `.junie/guidelines.md` (or update the existing one).
+2. **Verify** the knowledge_base structure is set up (templates/, epics/, etc.) — if not, we can create an Epic for it.
+3. Once in place, all future Epics/PRDs will require agents to load **both** this file and `core-agent-instructions.md` at the start of every task.
+
+Does this version capture what you want? Any sections to expand (e.g., more on Ollama/local model handling, agent handoff protocols, error recovery)? Or shall we move to drafting **Epic 0: Initialize Guidelines & Knowledge Layer** to get the full structure committed? Let's keep forging! 🚀
