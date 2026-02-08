@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-require_relative 'lib/aider_desk_api'
+require_relative 'lib/./knowledge_base/ignore-this/aider_desk_api'
 
 # Configuration
 PROJECT_DIR = "/Users/ericsmith66/development/agent-forge/projects/eureka-homekit-rebuild"

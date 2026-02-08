@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-require_relative 'lib/aider_desk_api'
+require_relative 'lib/./knowledge_base/ignore-this/aider_desk_api'
 require 'yaml'
 require 'optparse'
 require 'json'
