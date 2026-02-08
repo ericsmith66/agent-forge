@@ -48,7 +48,7 @@ Owner: ericsmith66
 - Guidelines updated and `.gitignore` configured to support independent sub-project repositories.
 
 ## 12. Commit(s)
-- Pending
+- `docs: update guidelines and gitignore for sub-project structure` — `ddbcc1d`
 
 ## 13. Manual steps to verify and what user should see
 1. Review `.junie/guidelines.md`.
