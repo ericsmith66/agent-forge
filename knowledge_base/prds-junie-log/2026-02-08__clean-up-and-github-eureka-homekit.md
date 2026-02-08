@@ -58,7 +58,7 @@ Owner: ericsmith66
 - `projects/eureka-homekit-rebuild` cleaned and pushed to GitHub as a private repository.
 
 ## 12. Commit(s)
-- `docs: add task log for eureka-homekit cleanup` — Pending
+- `docs: add task log for eureka-homekit cleanup` — `74b5146`
 
 ## 13. Manual steps to verify and what user should see
 1. Check `projects/eureka-homekit-rebuild` for cleaned working tree.
