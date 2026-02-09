@@ -18,11 +18,18 @@ end
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
+require "capybara/rails"
+require "capybara/minitest"
 require "minitest/autorun"
 require "minitest/pride"
+require "view_component/test_helpers"
+require "view_component/system_test_helpers"
 
 module ActiveSupport
   class TestCase
+    include Capybara::Minitest::Assertions
+    include ViewComponent::TestHelpers
+    include ViewComponent::SystemTestHelpers
     # Run tests in parallel with specified workers
     parallelize(workers: :number_of_processors)
 

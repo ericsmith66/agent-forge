@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
   <head>
     <title><%= content_for(:title) || "Agent-Forge" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -15,14 +15,46 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css" rel="stylesheet" type="text/css" />
-
-    <%# Includes all stylesheet files in app/assets/stylesheets %>
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@latest/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#570df8",
+              "primary-content": "#ffffff",
+              secondary: "#f000b8",
+              "secondary-content": "#ffffff",
+              accent: "#37cdbe",
+              "accent-content": "#163835",
+              neutral: "#3d4451",
+              "neutral-content": "#ffffff",
+              "base-100": "#ffffff",
+              "base-200": "#f2f2f2",
+              "base-300": "#e5e6e6",
+              "base-content": "#1f2937",
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+      function initLucide() {
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
+      }
+      document.addEventListener("turbo:load", initLucide);
+      document.addEventListener("turbo:render", initLucide);
+      document.addEventListener("turbo:frame-load", initLucide);
+    </script>
   </head>
 
-  <body>
+  <body class="h-screen overflow-hidden bg-base-100 text-base-content antialiased" <%= "data-controller=debug" if Rails.env.development? %>>
     <%= yield %>
   </body>
 </html>

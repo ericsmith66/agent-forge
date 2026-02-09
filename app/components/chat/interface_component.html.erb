@@ -1,0 +1,25 @@
+<div class="flex flex-col h-full bg-base-100" data-controller="chat-scroll">
+  <!-- Chat Header -->
+  <div class="p-4 border-b border-base-300 flex justify-between items-center bg-base-200/50 shrink-0">
+    <div class="flex items-center gap-2">
+      <div class="badge badge-success badge-xs"></div>
+      <h2 class="text-sm font-bold truncate">Task: <%= @task.name.presence || "Main Thread" %></h2>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs opacity-50 italic">Agent: Junie</span>
+    </div>
+  </div>
+
+  <!-- Message List -->
+  <div class="flex-1 overflow-y-auto p-4 space-y-4" data-chat-scroll-target="messages" id="messages-container">
+    <% @messages.each do |message| %>
+      <%= render Chat::BubbleComponent.new(message: message) %>
+    <% end %>
+    <%= turbo_frame_tag "messages_list" %>
+  </div>
+
+  <!-- Chat Input -->
+  <div class="p-4 bg-base-200 border-t border-base-300 shrink-0">
+    <%= render Chat::InputComponent.new(task: @task) %>
+  </div>
+</div>

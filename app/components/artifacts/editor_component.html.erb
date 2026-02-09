@@ -1,0 +1,29 @@
+<turbo-frame id="artifact_viewer">
+  <div class="flex flex-col h-full bg-base-100" data-controller="autosave">
+    <%= form_with(model: [@artifact.project, @artifact], 
+                  class: "flex flex-col h-full",
+                  data: { 
+                    autosave_target: "form",
+                    action: "input->autosave#save" 
+                  }) do |f| %>
+      <!-- Editor Header -->
+      <div class="p-4 border-b border-base-300 flex justify-between items-center bg-base-200/50 shrink-0">
+        <div class="flex-1 mr-4">
+          <%= f.text_field :title, class: "input input-ghost input-sm w-full font-bold text-lg focus:bg-base-100 px-1" %>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-base-content/50" data-autosave-target="status">Saved</span>
+          <%= f.submit "Done", class: "btn btn-primary btn-sm" %>
+        </div>
+      </div>
+
+      <!-- Editor Content -->
+      <div class="flex-1 flex flex-col p-4 bg-white">
+        <%= f.text_area :content, 
+            class: "textarea textarea-ghost flex-1 w-full font-mono text-sm leading-relaxed focus:bg-white resize-none p-4",
+            placeholder: "Write in Markdown...",
+            spellcheck: false %>
+      </div>
+    <% end %>
+  </div>
+</turbo-frame>

@@ -4,21 +4,20 @@ class DashboardControllerTest < ActionDispatch::IntegrationTest
   test "GET root shows dashboard" do
     get root_path
     assert_response :success
-    assert_select "[data-testid='navbar']"
-    assert_select "[data-testid='dashboard-content']"
+    assert_select "header", text: /AGENT-FORGE/
   end
 
   test "shows first active project by default" do
     get root_path
     assert_response :success
-    assert_select "[data-testid='current-project-name']", text: /Agent-Forge/
+    assert_select "#project-switcher-dropdown", text: /Agent-Forge/
   end
 
   test "shows specific project via project_id" do
     project = projects(:agent_forge)
     get dashboard_project_path(project)
     assert_response :success
-    assert_select "[data-testid='current-project-name']", text: /Agent-Forge/
+    assert_select "#project-switcher-dropdown", text: /Agent-Forge/
   end
 
   test "redirects for invalid project_id" do
@@ -30,29 +29,18 @@ class DashboardControllerTest < ActionDispatch::IntegrationTest
   test "shows project switcher when projects exist" do
     get root_path
     assert_response :success
-    assert_select "[data-testid='project-switcher']"
+    assert_select "#project-switcher-dropdown"
   end
 
-  test "shows welcome message when no projects" do
-    Project.destroy_all
+  test "shows active status in navbar" do
     get root_path
     assert_response :success
-    assert_select "h2", text: "Welcome to Agent-Forge"
+    assert_select ".badge-success", text: /Active/
   end
 
-  test "shows artifact stats" do
+  test "shows artifact tree" do
     get root_path
     assert_response :success
-    assert_select "[data-testid='stat-artifacts']"
-    assert_select "[data-testid='stat-tasks']"
-    assert_select "[data-testid='stat-status']"
-  end
-
-  test "shows artifacts table" do
-    get root_path
-    assert_response :success
-    # epic_one is a root artifact
-    assert_select "table.table"
-    assert_select "td", text: /Epic 1/
+    assert_select "#artifact_tree"
   end
 end

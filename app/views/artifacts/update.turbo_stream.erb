@@ -1,0 +1,7 @@
+<%= turbo_stream.replace "artifact_viewer" do %>
+  <%= render Artifacts::ViewerComponent.new(artifact: @artifact) %>
+<% end %>
+
+<%= turbo_stream.replace "artifact_tree" do %>
+  <%= render Artifacts::TreeComponent.new(project: @artifact.project) %>
+<% end %>

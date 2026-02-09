@@ -12,6 +12,12 @@ Rails.application.routes.draw do
 
   resources :projects, only: [] do
     get "dashboard", to: "dashboard#show", on: :member
+    post "debug/log", to: "debug_logs#create" if Rails.env.development?
+    resources :artifacts, only: [:index, :show, :edit, :update]
+  end
+
+  resources :tasks, only: [] do
+    resources :messages, only: [:create]
   end
 
   root "dashboard#show"

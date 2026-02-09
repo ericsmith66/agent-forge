@@ -9,6 +9,14 @@ class Artifact < ApplicationRecord
   validates :title, presence: true
   validates :artifact_type, presence: true
 
+  def content
+    jsonb_document["content"]
+  end
+
+  def content=(value)
+    self.jsonb_document["content"] = value
+  end
+
   scope :by_type, ->(type) { where(artifact_type: type) }
   scope :by_status, ->(status) { where(status: status) }
   scope :roots, -> { where(parent_id: nil) }

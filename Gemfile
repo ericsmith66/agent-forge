@@ -42,13 +42,15 @@ gem "view_component", "~> 3.0"
 # Authentication
 gem "devise", "~> 4.9"
 # Markdown rendering for artifact viewer
-gem "commonmarker", "~> 1.0"
+gem "redcarpet", "~> 3.6"
 # SimpleCov for test coverage
 gem "simplecov", require: false
 
 group :test do
   gem "webmock"
   gem "vcr"
+  gem "capybara"
+  gem "selenium-webdriver"
 end
 
 group :development, :test do

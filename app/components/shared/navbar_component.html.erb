@@ -1,0 +1,56 @@
+<header class="h-16 bg-base-200 border-b border-base-300 flex items-center px-4 shrink-0 z-10">
+  <nav class="w-full flex items-center justify-between gap-4">
+  <!-- Left: Logo & Project Switcher -->
+  <div class="flex items-center gap-6">
+    <div class="flex items-center min-w-[120px]">
+      <a href="/" class="font-black tracking-tighter text-xl text-primary">AGENT-FORGE</a>
+    </div>
+
+    <div class="dropdown" data-controller="project-switcher" id="project-switcher-dropdown">
+      <label tabindex="0" class="btn btn-ghost btn-sm gap-2">
+        <i data-lucide="folder" class="w-4 h-4 opacity-50"></i>
+        <span><%= @project ? @project.name : "Select Project" %></span>
+        <i data-lucide="chevron-down" class="w-4 h-4 opacity-50"></i>
+      </label>
+      <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-56 p-2 shadow-xl border border-base-300 mt-2">
+        <li class="menu-title">Switch Project</li>
+        <% @projects.each do |proj| %>
+          <li>
+            <a href="<%= dashboard_project_path(proj) %>" 
+               class="<%= 'active' if proj == @project %>"
+               data-action="click->project-switcher#close">
+              <%= proj.name %>
+            </a>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  </div>
+
+  <div class="hidden md:flex flex-1 max-w-[500px] mx-auto">
+    <label class="input input-bordered input-sm flex items-center gap-2 w-full bg-base-100/50 focus-within:bg-base-100 transition-colors">
+      <i data-lucide="search" class="w-4 h-4 opacity-50"></i>
+      <input type="text" class="grow" placeholder="Search (Cmd+K)" aria-label="Search" />
+    </label>
+  </div>
+
+    <div class="flex items-center gap-3 min-w-[160px] justify-end">
+    <div class="badge badge-success badge-md gap-1.5 font-bold px-3 py-3 shadow-sm text-success-content">
+      <span class="w-2 h-2 rounded-full bg-success-content animate-pulse"></span>
+      Active
+    </div>
+
+    <div class="divider divider-horizontal mx-0 h-8"></div>
+
+    <button class="btn btn-ghost btn-sm btn-square" aria-label="Notifications">
+      <i data-lucide="bell" class="w-4 h-4"></i>
+    </button>
+    
+    <div class="avatar placeholder cursor-pointer">
+      <div class="bg-neutral text-neutral-content rounded-full w-8 ring ring-base-300 ring-offset-base-100 ring-offset-1 flex items-center justify-center">
+        <span class="text-xs">U</span>
+      </div>
+    </div>
+  </div>
+</nav>
+</header>

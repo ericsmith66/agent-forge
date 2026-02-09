@@ -1,0 +1,28 @@
+<li aria-selected="<%= @selected %>" class="group/item">
+  <a data-turbo-frame="artifact_viewer" 
+     class="flex items-center py-1.5 px-2 rounded-lg transition-all duration-200 text-sm <%= @selected ? 'bg-primary text-primary-content shadow' : 'hover:bg-base-300 text-base-content hover:text-base-content' %>" 
+     href="<%= project_artifact_path(@artifact.project, @artifact) %>">
+    
+    <div class="flex items-center justify-center w-5 h-5 mr-2 opacity-70 group-hover/item:opacity-100">
+      <i data-lucide="<%= icon_class %>" class="w-4 h-4"></i>
+    </div>
+
+    <span class="flex-1 truncate font-medium">
+      <%= @artifact.title %>
+    </span>
+
+    <% unless @selected %>
+      <div class="opacity-0 group-hover/item:opacity-100">
+        <%= render(Artifacts::StatusBadgeComponent.new(status: @artifact.status)) %>
+      </div>
+    <% end %>
+  </a>
+
+  <% if @artifact.children.any? %>
+    <ul class="mt-1 ml-4 space-y-1 border-l border-base-300 pl-2">
+      <% @artifact.children.ordered.each do |child| %>
+        <%= render(Artifacts::TreeItemComponent.new(artifact: child, selected: @selected && @artifact == child, depth: @depth + 1)) %>
+      <% end %>
+    </ul>
+  <% end %>
+</li>

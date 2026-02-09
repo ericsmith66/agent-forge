@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent-Forge Dashboard Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.7.2/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col bg-base-100">
+
+    <!-- Top Navbar (h: 64px) -->
+    <header class="h-16 bg-base-200 border-b border-base-300 flex items-center px-4 shrink-0 z-10">
+        <nav class="w-full flex items-center gap-4">
+            <!-- Left: Logo -->
+            <div class="flex items-center min-w-[120px]">
+                <span class="font-black tracking-tighter text-xl text-primary">AGENT-FORGE</span>
+            </div>
+
+            <!-- Project Switcher -->
+            <div class="dropdown">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
+                    Project: agent-forge
+                    <i data-lucide="chevron-down" class="w-4 h-4 ml-1"></i>
+                </div>
+                <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-56 p-2 shadow border border-base-300">
+                    <li><a>agent-forge</a></li>
+                    <li><a>eureka-homekit</a></li>
+                    <li><a>aider-desk-test</a></li>
+                </ul>
+            </div>
+
+            <!-- Center: Search -->
+            <div class="flex-1 max-w-[600px] mx-auto">
+                <label class="input input-bordered input-sm flex items-center gap-2 w-full bg-base-100">
+                    <i data-lucide="search" class="w-4 h-4 opacity-50"></i>
+                    <input type="text" class="grow" placeholder="Search artifacts (Cmd+K)" />
+                </label>
+            </div>
+
+            <!-- Right: Status + User -->
+            <div class="flex items-center gap-3 min-w-[160px] justify-end">
+                <div class="badge badge-success gap-1">
+                    <span class="w-2 h-2 rounded-full bg-success-content animate-pulse"></span>
+                    Active
+                </div>
+                <button class="btn btn-ghost btn-sm btn-square">
+                    <i data-lucide="bell" class="w-4 h-4"></i>
+                </button>
+                <div class="avatar placeholder">
+                    <div class="bg-neutral text-neutral-content rounded-full w-8">
+                        <span>JD</span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- 1. Left Sidebar: Artifact Tree (w: 280px) -->
+        <aside class="w-[280px] bg-base-200 border-r border-base-300 flex flex-col shrink-0">
+            <div class="p-3 h-12 border-b border-base-300 flex items-center justify-between shrink-0">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-base-content/60">Artifacts</h2>
+                <button class="btn btn-ghost btn-xs btn-square" title="New Artifact">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-2">
+                <nav class="space-y-1">
+                    <!-- Group: Epics -->
+                    <details open class="group">
+                        <summary class="flex items-center p-2 text-xs font-bold uppercase text-base-content/60 cursor-pointer hover:text-base-content transition-colors list-none">
+                            <i data-lucide="chevron-right" class="w-3 h-3 mr-1 transition-transform group-open:rotate-90"></i>
+                            Epics (2)
+                        </summary>
+                        <ul class="mt-1 space-y-1">
+                            <!-- Active Item -->
+                            <li>
+                                <a class="flex items-center py-1.5 px-2 rounded-lg bg-primary text-primary-content text-sm">
+                                    <i data-lucide="layers" class="w-4 h-4 mr-2"></i>
+                                    <span class="truncate">Epic 2: UI Foundation</span>
+                                </a>
+                                <ul class="mt-1 ml-4 space-y-1 border-l border-base-300 pl-2">
+                                    <li>
+                                        <a class="flex items-center py-1 px-2 rounded-lg hover:bg-base-300 text-sm text-base-content">
+                                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                                            <span class="truncate">PRD-2-04: Tree</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="flex items-center py-1 px-2 rounded-lg hover:bg-base-300 text-sm text-base-content">
+                                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                                            <span class="truncate">PRD-2-05: Chat</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li>
+                                <a class="flex items-center py-1.5 px-2 rounded-lg hover:bg-base-300 text-sm text-base-content">
+                                    <i data-lucide="layers" class="w-4 h-4 mr-2"></i>
+                                    <span class="truncate">Epic 1: Bootstrap</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </details>
+
+                    <!-- Group: Ideas -->
+                    <details class="group mt-4">
+                        <summary class="flex items-center p-2 text-xs font-bold uppercase text-base-content/60 cursor-pointer hover:text-base-content transition-colors list-none">
+                            <i data-lucide="chevron-right" class="w-3 h-3 mr-1 transition-transform group-open:rotate-90"></i>
+                            Ideas (3)
+                        </summary>
+                        <ul class="mt-1 space-y-1">
+                            <li>
+                                <a class="flex items-center py-1 px-2 rounded-lg hover:bg-base-300 text-sm text-base-content">
+                                    <i data-lucide="lightbulb" class="w-4 h-4 mr-2"></i>
+                                    <span>Voice Control Interface</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </details>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- 2. Center Pane: Chat (flex-1) -->
+        <main class="flex-1 flex flex-col min-w-[400px] border-r border-base-300 bg-base-100">
+            <!-- Chat Header -->
+            <div class="p-4 border-b border-base-300 flex justify-between items-center bg-base-200/50 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="badge badge-success badge-xs"></div>
+                    <h2 class="text-sm font-bold truncate">Task: Implement Sidebar</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs opacity-50 italic">Agent: Junie</span>
+                </div>
+            </div>
+
+            <!-- Message List -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <!-- User Message -->
+                <div class="chat chat-end">
+                    <div class="chat-image avatar placeholder">
+                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                            <span>U</span>
+                        </div>
+                    </div>
+                    <div class="chat-header opacity-50 text-xs mb-1">User <time class="opacity-50">12:45</time></div>
+                    <div class="chat-bubble chat-bubble-primary shadow-sm">
+                        Can you update the sidebar tree to support nested PRDs under Epics?
+                    </div>
+                </div>
+
+                <!-- Assistant Message -->
+                <div class="chat chat-start">
+                    <div class="chat-image avatar placeholder">
+                        <div class="bg-primary text-primary-content rounded-full w-8">
+                            <span>J</span>
+                        </div>
+                    </div>
+                    <div class="chat-header opacity-50 text-xs mb-1">Junie <time class="opacity-50">12:46</time></div>
+                    <div class="chat-bubble bg-base-200 text-base-content shadow-sm border border-base-300">
+                        I've updated `Artifacts::TreeItemComponent` to recursively render children. Check the viewer on the right to see the updated PRD.
+                    </div>
+                </div>
+
+                <!-- Tool/System Message -->
+                <div class="flex justify-center my-2">
+                    <div class="badge badge-ghost badge-sm gap-2 py-3 px-4 italic opacity-70">
+                        <i data-lucide="terminal" class="w-3 h-3"></i>
+                        Updated app/components/artifacts/tree_item_component.html.erb
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="p-4 bg-base-200 border-t border-base-300 shrink-0">
+                <div class="relative max-w-4xl mx-auto">
+                    <textarea rows="1" class="textarea textarea-bordered w-full pr-12 focus:textarea-primary min-h-[3rem] max-h-48 resize-none py-3" placeholder="Type a message or /command..."></textarea>
+                    <div class="absolute right-3 bottom-3">
+                        <button class="btn btn-primary btn-sm btn-square">
+                            <i data-lucide="send" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 3. Right Pane: Viewer (w: 480px) -->
+        <aside class="w-[480px] bg-base-100 flex flex-col shrink-0 overflow-hidden">
+            <!-- Viewer Header -->
+            <div class="p-4 border-b border-base-300 flex justify-between items-center bg-base-200/30 shrink-0">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-bold truncate">PRD-2-04: Tree Navigation</h2>
+                    <div class="badge badge-secondary badge-sm">Implemented</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button class="btn btn-ghost btn-sm btn-square" title="Edit">
+                        <i data-lucide="edit-3" class="w-4 h-4"></i>
+                    </button>
+                    <button class="btn btn-ghost btn-sm btn-square">
+                        <i data-lucide="share" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Viewer Content -->
+            <div class="flex-1 overflow-y-auto p-8 bg-white">
+                <article class="prose prose-sm max-w-none">
+                    <h1>Artifact Sidebar Tree</h1>
+                    <p class="text-base-content/60">Updated: 2026-02-09 13:05</p>
+                    
+                    <h3>Overview</h3>
+                    <p>Build the left sidebar artifact tree that displays the project's artifact hierarchy (Ideas, Epics, PRDs).</p>
+
+                    <h3>Requirements</h3>
+                    <ul>
+                        <li>Groups artifacts by type.</li>
+                        <li>Supports nesting (Epics → PRDs).</li>
+                        <li>Keyboard navigation (↑/↓).</li>
+                    </ul>
+
+                    <div class="bg-base-200 p-4 rounded-lg border border-base-300 my-4">
+                        <h4 class="mt-0">Implementation Detail</h4>
+                        <p class="text-xs mb-0">The component uses recursive rendering in <code>tree_item_component.html.erb</code>.</p>
+                    </div>
+
+                    <h3>Acceptance Criteria</h3>
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-3">
+                            <input type="checkbox" checked="checked" class="checkbox checkbox-xs checkbox-primary" />
+                            <span class="label-text">Tree renders correctly</span>
+                        </label>
+                        <label class="label cursor-pointer justify-start gap-3">
+                            <input type="checkbox" checked="checked" class="checkbox checkbox-xs checkbox-primary" />
+                            <span class="label-text">Nesting works</span>
+                        </label>
+                    </div>
+                </article>
+            </div>
+        </aside>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
