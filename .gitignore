@@ -33,3 +33,6 @@ projects/*
 
 # Local env files
 .env*.local
+
+# SimpleCov coverage reports
+coverage/

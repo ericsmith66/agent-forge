@@ -1,0 +1,211 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative '../lib/aider_desk/client'
+require 'optparse'
+require 'json'
+
+# ─── Output Helpers ─────────────────────────────────────────────────────────
+
+def puts_json(data)
+  puts JSON.pretty_generate(data)
+rescue
+  puts data.inspect
+end
+
+def puts_response(res, label = nil)
+  if res.success?
+    puts "[OK] #{label}" if label
+    puts_json(res.data) if res.data
+    puts res.body if res.data.nil? && res.body && !res.body.empty?
+  else
+    $stderr.puts "[ERROR] #{label}: #{res.error || res.status} #{res.body}"
+    exit 1
+  end
+end
+
+# ─── Commands ───────────────────────────────────────────────────────────────
+
+def cmd_health(client, _args, _opts)
+  result = client.health
+  if result[:ok]
+    puts "[OK] AiderDesk is alive (status: #{result[:status]})"
+  else
+    $stderr.puts "[ERROR] AiderDesk unreachable: #{result[:error]}"
+    exit 1
+  end
+end
+
+def cmd_settings(client, _args, _opts)
+  puts_response client.get_settings, "Settings"
+end
+
+def cmd_task_create(client, _args, opts)
+  puts_response client.create_task(name: opts[:name]), "Task created"
+end
+
+def cmd_task_list(client, _args, _opts)
+  puts_response client.list_tasks, "Tasks"
+end
+
+def cmd_task_status(client, _args, opts)
+  require_opt!(opts, :task, "task:status")
+  data = client.task_status(task_id: opts[:task])
+  if data
+    puts "[OK] Task status"
+    puts_json(data)
+  else
+    $stderr.puts "[ERROR] Could not load task #{opts[:task]}"
+    exit 1
+  end
+end
+
+def cmd_task_messages(client, _args, opts)
+  require_opt!(opts, :task, "task:messages")
+  messages = client.task_messages(task_id: opts[:task])
+  puts "[OK] #{messages.length} message(s)"
+  messages.each do |msg|
+    role = msg["type"] || msg["role"] || "unknown"
+    content = msg.fetch("content", "")
+    display = content.length > 120 ? "#{content[0...120]}..." : content
+    puts "  [#{role}] #{display}"
+  end
+end
+
+def cmd_prompt_quick(client, args, opts)
+  prompt_text = args.join(" ")
+  if prompt_text.empty?
+    $stderr.puts "[ERROR] No prompt text provided. Usage: prompt:quick \"your prompt\""
+    exit 1
+  end
+
+  mode = opts[:mode] || "agent"
+  name = opts[:name] || "CLI Quick Task"
+  puts "[*] Creating task and running prompt (mode: #{mode})..."
+
+  result = client.run_and_wait(
+    prompt: prompt_text,
+    name: name,
+    mode: mode,
+    timeout: opts[:timeout] || 120,
+    poll_interval: opts[:interval] || 5
+  ) do |msg|
+    role = msg["type"] || msg["role"] || "unknown"
+    content = msg.fetch("content", "")
+    display = content.length > 120 ? "#{content[0...120]}..." : content
+    puts "  [#{role}] #{display}"
+  end
+
+  if result[:response].is_a?(AiderDesk::Response) && result[:response].success?
+    puts "[OK] Done. Task ID: #{result[:task_id]}"
+  elsif result[:response].is_a?(Hash) && result[:response][:status] == :timeout
+    puts "[WARN] Timed out. Task ID: #{result[:task_id]}"
+  else
+    $stderr.puts "[ERROR] Failed. Task ID: #{result[:task_id]}"
+    exit 1
+  end
+end
+
+def cmd_prompt(client, args, opts)
+  require_opt!(opts, :task, "prompt")
+  prompt_text = args.join(" ")
+  if prompt_text.empty?
+    $stderr.puts "[ERROR] No prompt text provided"
+    exit 1
+  end
+
+  mode = opts[:mode] || "agent"
+  puts "[*] Running prompt on task #{opts[:task]} (mode: #{mode})..."
+
+  final = client.run_prompt_and_wait(
+    task_id: opts[:task],
+    prompt: prompt_text,
+    mode: mode,
+    timeout: opts[:timeout] || 120,
+    poll_interval: opts[:interval] || 5
+  ) do |msg|
+    role = msg["type"] || msg["role"] || "unknown"
+    content = msg.fetch("content", "")
+    display = content.length > 120 ? "#{content[0...120]}..." : content
+    puts "  [#{role}] #{display}"
+  end
+
+  if final.is_a?(AiderDesk::Response) && final.success?
+    puts "[OK] Prompt completed."
+  elsif final.is_a?(Hash) && final[:status] == :timeout
+    puts "[WARN] Timed out."
+  else
+    $stderr.puts "[ERROR] Prompt failed."
+    exit 1
+  end
+end
+
+# ─── Helpers ────────────────────────────────────────────────────────────────
+
+def require_opt!(opts, key, cmd_name)
+  return if opts[key]
+  $stderr.puts "[ERROR] --#{key} is required for '#{cmd_name}'"
+  exit 1
+end
+
+# ─── Command Registry ──────────────────────────────────────────────────────
+
+COMMANDS = {
+  "health"         => method(:cmd_health),
+  "settings"       => method(:cmd_settings),
+  "task:create"    => method(:cmd_task_create),
+  "task:list"      => method(:cmd_task_list),
+  "task:status"    => method(:cmd_task_status),
+  "task:messages"  => method(:cmd_task_messages),
+  "prompt"         => method(:cmd_prompt),
+  "prompt:quick"   => method(:cmd_prompt_quick),
+}.freeze
+
+# ─── Main ───────────────────────────────────────────────────────────────────
+
+opts = {}
+
+global_parser = OptionParser.new do |o|
+  o.banner = "Usage: bin/aider_cli [options] <command> [args...]"
+  o.separator ""
+  o.separator "Commands: #{COMMANDS.keys.join(', ')}"
+  o.separator ""
+  o.separator "Options:"
+
+  o.on("--url URL",        "AiderDesk base URL")                { |v| opts[:url] = v }
+  o.on("--user USER",      "Basic auth username")                { |v| opts[:user] = v }
+  o.on("--pass PASS",      "Basic auth password")                { |v| opts[:pass] = v }
+  o.on("--project DIR",    "Project directory")                  { |v| opts[:project] = v }
+  o.on("--task ID",        "Task ID")                            { |v| opts[:task] = v }
+  o.on("--name NAME",      "Task name")                          { |v| opts[:name] = v }
+  o.on("--mode MODE",      "Prompt mode (agent/code/ask/architect)") { |v| opts[:mode] = v }
+  o.on("--timeout SECS",   Integer, "Timeout in seconds")        { |v| opts[:timeout] = v }
+  o.on("--interval SECS",  Integer, "Poll interval in seconds")  { |v| opts[:interval] = v }
+  o.on("-h", "--help",     "Show this help")                     { puts o; exit }
+end
+
+global_parser.permute!
+
+command = ARGV.shift
+
+unless command && COMMANDS[command]
+  if command
+    $stderr.puts "Unknown command: #{command}"
+  else
+    $stderr.puts "No command specified."
+  end
+  $stderr.puts global_parser
+  exit 1
+end
+
+remaining_args = ARGV.dup
+ARGV.clear
+
+client = AiderDesk::Client.new(
+  base_url:    opts[:url],
+  username:    opts[:user],
+  password:    opts[:pass],
+  project_dir: opts[:project]
+)
+
+COMMANDS[command].call(client, remaining_args, opts)

@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+
+      - name: Install dependencies
+        run: |
+          gem install minitest simplecov webmock vcr --no-document
+
+      - name: Run unit tests
+        run: |
+          ruby -Ilib:test test/lib/aider_desk/client_test.rb \
+                          test/lib/aider_desk/api_error_test.rb \
+                          test/lib/smart_proxy/aider_desk_adapter_test.rb
+
+      - name: Run VCR integration tests
+        run: |
+          ruby -Ilib:test test/integration/aider_desk/health_check_test.rb \
+                          test/integration/aider_desk/task_creation_test.rb \
+                          test/integration/aider_desk/e2e_flow_test.rb
+
+      - name: Run CLI system tests
+        run: |
+          ruby -Ilib:test test/system/aider_cli_test.rb
+
+      - name: Check coverage
+        run: |
+          echo "Coverage report generated in coverage/index.html"
+          echo "Check SimpleCov output above for ≥90% coverage on lib/"

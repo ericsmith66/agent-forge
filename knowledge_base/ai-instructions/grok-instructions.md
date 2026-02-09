@@ -2,8 +2,8 @@ All of you knowledge comes either from our conversation or  https://github.com/e
 there are instructions for you https://github.com/ericsmith66/eureka-homekit/knowledge_base/grok-instructions.md ( this docment)
 
 ### Core Guidelines
-- **Epic Scope**: epics contain a set of related PRsD tasks 
-- **Atomic Scope**: Limit each PRD to one focused feature (e.g., Plaid link_token generation, not full onboarding). Include:
+- **Epic Scope**: epics contain a set of related PRDs tasks 
+- **Atomic Scope**: Limit each PRD to one focused feature . Include:
     - Overview (1-2 sentences tying to vision).
       -Log Requirements  Junie read <project root>/knowledge_base/prds/prds-junie-log/junie-log-requirement.md
     - Requirements (functional/non-functional, with Rails-specific guidance like models/migrations/controllers).

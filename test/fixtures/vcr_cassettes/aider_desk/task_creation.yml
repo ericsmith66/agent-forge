@@ -1,0 +1,63 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: http://localhost:24337/api/settings
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"mainModel":"claude-sonnet-4-20250514","editFormat":"diff","autoCommit":false}'
+  recorded_at: 2026-02-08 19:00:01.000000000 Z
+- request:
+    method: post
+    uri: http://localhost:24337/api/project/tasks/new
+    body:
+      encoding: UTF-8
+      string: '{"projectDir":"/Users/ericsmith66/development/agent-forge/projects/aider-desk-test","parentId":null,"name":"vcr-test-task"}'
+    headers:
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"id":"vcr-task-001","name":"vcr-test-task","messages":[]}'
+  recorded_at: 2026-02-08 19:00:02.000000000 Z
+- request:
+    method: post
+    uri: http://localhost:24337/api/project/tasks/delete
+    body:
+      encoding: UTF-8
+      string: '{"projectDir":"/Users/ericsmith66/development/agent-forge/projects/aider-desk-test","id":"vcr-task-001"}'
+    headers:
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"ok":true}'
+  recorded_at: 2026-02-08 19:00:03.000000000 Z
+recorded_with: VCR 6.3.1
