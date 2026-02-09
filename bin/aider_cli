@@ -184,7 +184,7 @@ global_parser = OptionParser.new do |o|
   o.on("-h", "--help",     "Show this help")                     { puts o; exit }
 end
 
-global_parser.order!
+global_parser.permute!
 
 command = ARGV.shift
 

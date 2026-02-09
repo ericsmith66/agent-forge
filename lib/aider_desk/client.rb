@@ -82,6 +82,9 @@ module AiderDesk
       res = get_settings
       if res.success?
         { ok: true, status: res.status, data: res.data }
+      elsif res.status == 401
+        # 401 means AiderDesk is reachable but requires authentication
+        { ok: true, status: res.status, data: nil, warning: 'Authentication required — set credentials' }
       else
         { ok: false, status: res.status, error: res.error || res.body }
       end
@@ -89,7 +92,7 @@ module AiderDesk
       { ok: false, status: 0, error: e.message }
     end
 
-    # Boolean health check
+    # Boolean health check — true if AiderDesk is reachable (even if auth is needed)
     def health_check
       health[:ok]
     end

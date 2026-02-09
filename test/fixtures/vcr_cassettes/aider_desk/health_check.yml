@@ -1,0 +1,23 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: http://localhost:24337/api/settings
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"mainModel":"claude-sonnet-4-20250514","editFormat":"diff","autoCommit":false}'
+  recorded_at: 2026-02-08 19:00:00.000000000 Z
+recorded_with: VCR 6.3.1
