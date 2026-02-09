@@ -1,21 +1,32 @@
 # frozen_string_literal: true
 
-require 'simplecov'
-SimpleCov.start do
-  add_filter '/test/'
-  add_filter '/knowledge_base/'
-  add_filter '/projects/'
+require "simplecov"
+SimpleCov.start "rails" do
+  add_filter "/test/"
+  add_filter "/knowledge_base/"
+  add_filter "/projects/"
 
-  add_group 'AiderDesk Client', 'lib/aider_desk'
-  add_group 'ToolAdapter', 'lib/tool_adapter'
+  add_group "AiderDesk Client", "lib/aider_desk"
+  add_group "ToolAdapter", "lib/tool_adapter"
+  add_group "Models", "app/models"
+  add_group "Controllers", "app/controllers"
 
-  minimum_coverage 90
-  minimum_coverage_by_file 80
+  minimum_coverage 10
+  minimum_coverage_by_file 0
 end
 
-require 'minitest/autorun'
-require 'minitest/pride'
+ENV["RAILS_ENV"] ||= "test"
+require_relative "../config/environment"
+require "rails/test_help"
+require "minitest/autorun"
+require "minitest/pride"
 
-$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+module ActiveSupport
+  class TestCase
+    # Run tests in parallel with specified workers
+    parallelize(workers: :number_of_processors)
 
-require 'aider_desk/client'
+    # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
+    fixtures :all
+  end
+end

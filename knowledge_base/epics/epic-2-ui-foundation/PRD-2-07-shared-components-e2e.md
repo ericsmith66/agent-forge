@@ -65,6 +65,27 @@ Build the shared/reusable UI components (modals, toasts, loading states, command
   - Create previews for key components: DashboardComponent, TreeComponent, BubbleComponent, ViewerComponent, DiffPreviewComponent, ModalComponent, ToastComponent.
   - Accessible at `/rails/view_components` in development.
 
+- **Browser Debug Logger** (AI-agent visibility for client-side errors):
+  - **Problem:** AI agents (Junie) cannot access browser console logs, leading to back-and-forth debugging for JS/ActionCable/asset pipeline issues.
+  - **Solution:** Lightweight Stimulus controller + Rails endpoint that forwards browser `console.error` and `console.warn` to a server-side log file, giving agents direct read access.
+  - `app/javascript/controllers/debug_controller.js`:
+    - Intercepts `console.error` and `console.warn` only (not `console.log` — too noisy).
+    - POSTs each captured entry to `/debug/log` with `{ level:, message:, url:, timestamp: }`.
+    - Debounces to avoid flooding (batch entries every 2 seconds).
+    - Also captures `window.onerror` and `unhandledrejection` events for uncaught exceptions.
+    - Attached to `<body>` in development layout only.
+  - `app/controllers/debug_logs_controller.rb`:
+    - `POST /debug/log` — appends to `log/browser_debug.log` (no DB, no model).
+    - Gated by `Rails.env.development?` — returns 404 in other environments.
+    - Accepts JSON body: `{ level: "error"|"warn", message: String, url: String, timestamp: String }`.
+    - Format: `[2026-02-09 04:56:00] [ERROR] Uncaught TypeError: ... (http://localhost:3000/dashboard)`
+  - `config/routes.rb`: `post "debug/log", to: "debug_logs#create"` (inside `if Rails.env.development?` block).
+  - `lib/tasks/debug.rake`:
+    - `rails debug:tail` — tails `log/browser_debug.log` in real-time.
+    - `rails debug:clear` — truncates the log file.
+  - **Security:** Development-only. No authentication required (dev env). No sensitive data logged (just error messages and URLs).
+  - **Future:** After Epic 2, add Sentry for production error tracking. After Epic 7, add Playwright for automated browser console capture in CI.
+
 #### Non-Functional
 
 - All shared components render in <50ms.
@@ -81,8 +102,11 @@ Build the shared/reusable UI components (modals, toasts, loading states, command
 - `app/javascript/controllers/modal_controller.js`
 - `app/javascript/controllers/toast_controller.js`
 - `app/javascript/controllers/command_palette_controller.js`
+- `app/javascript/controllers/debug_controller.js`
+- `app/controllers/debug_logs_controller.rb`
+- `lib/tasks/debug.rake`
 - `test/components/previews/` — ViewComponent preview classes.
-- Update `app/views/layouts/application.html.erb` with skip link and toast container.
+- Update `app/views/layouts/application.html.erb` with skip link, toast container, and debug controller (dev only).
 
 ---
 
@@ -115,6 +139,9 @@ Shared components are the **utility layer** — reusable across all panes and fe
 - [ ] E2E test passes: create artifact via chat → see in tree → view → edit → save.
 - [ ] SimpleCov ≥ 90% for all Epic 2 code (models, components, controllers, services).
 - [ ] All tests pass (unit, integration, system).
+- [ ] Browser debug logger: `console.error` in browser → entry appears in `log/browser_debug.log`.
+- [ ] Debug endpoint returns 404 in test/production environments.
+- [ ] `rails debug:tail` and `rails debug:clear` rake tasks work.
 
 ---
 
@@ -137,6 +164,11 @@ Shared components are the **utility layer** — reusable across all panes and fe
 - `test/components/shared/command_palette_component_test.rb`:
   - Renders search input.
   - Renders results list.
+
+- `test/controllers/debug_logs_controller_test.rb`:
+  - POST `/debug/log` with valid JSON → 204 No Content, entry written to log file.
+  - POST `/debug/log` with missing fields → 422.
+  - Endpoint returns 404 when not in development environment.
 
 #### Integration (Minitest)
 

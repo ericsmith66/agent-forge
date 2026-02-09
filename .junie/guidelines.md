@@ -16,13 +16,15 @@ agent-forge is the **meta-framework** that AI coding agents use to build and imp
 ## 1) Repo overview (what this is)
 
 - Ruby on Rails 7+ application (API + web for agent orchestration/dashboard).
+- server is running on an m3ultra with 128gb ram and starts on port 3017 its IP is 192.168.4.200
 - UI work frequently uses:
   - Hotwire/Turbo (`turbo_frame_tag`, `turbo_stream`)
   - ViewComponent (`app/components/agents/`, `app/components/shared/`)
   - DaisyUI + Tailwind CSS for styling
 - Tests use **Minitest** (`test/` folder), including `ViewComponent::TestCase` and system tests with Capybara.
 - Persistent knowledge & planning live in `knowledge_base/`:
-  - `core-agent-instructions.md` (global agent rules)
+  - `ai-instructions/grok-instructions.md` (global agent rules)
+  - `ai-instructions/junie-log-requirement.md` (logging standards)
   - Templates for Epics/PRDs/status trackers
   - Active epics, PRDs, implementation logs
 - Agents interact with repo via:
@@ -179,7 +181,8 @@ Log test results in status trackers or task output.
 ## 7) Documentation & knowledge base workflow
 
 ### Always reference knowledge_base first
-- Read `knowledge_base/core-agent-instructions.md` on every major task.
+- Read `knowledge_base/ai-instructions/grok-instructions.md` on every major task.
+- Then `knowledge_base/ai-instructions/junie-log-requirement.md` for logging rules.
 - Then `.junie/guidelines.md` (this file).
 - Then relevant Epic/PRD + `*-IMPLEMENTATION-STATUS.md`.
 
@@ -191,10 +194,10 @@ Log test results in status trackers or task output.
 
 ### Self-improvement rule
 - When improving agents, tools, or architecture:
-  - Also propose updates to this file, `core-agent-instructions.md`, or templates.
+  - Also propose updates to this file, `ai-instructions/grok-instructions.md`, or templates.
   - Use the Epic/PRD → implementation → review loop.
 
 ---
 
-Last updated: 2026-02-08  
+Last updated: 2026-02-09  
 Project: agent-forge — self-building AI agent framework
