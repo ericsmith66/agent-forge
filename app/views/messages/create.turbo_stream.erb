@@ -1,0 +1,13 @@
+<%= turbo_stream.append "messages_list" do %>
+  <%= render Chat::BubbleComponent.new(message: @message) %>
+<% end %>
+
+<% @task.messages.where("id > ?", @message.id).each do |reply| %>
+  <%= turbo_stream.append "messages_list" do %>
+    <%= render Chat::BubbleComponent.new(message: reply) %>
+  <% end %>
+<% end %>
+
+<%= turbo_stream.replace "artifact_tree" do %>
+  <%= render Artifacts::TreeComponent.new(project: @task.project) %>
+<% end %>

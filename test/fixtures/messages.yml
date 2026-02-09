@@ -1,0 +1,4 @@
+user_message:
+  task: pending_task
+  role: user
+  content: "Please set up the scaffold"

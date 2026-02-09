@@ -1,0 +1,32 @@
+<div data-controller="slash-commands">
+  <%= form_with(model: [@task, Message.new], url: task_messages_path(@task), data: { turbo_frame: "messages_list", action: "turbo:submit-end->slash-commands#reset" }, class: "relative max-w-4xl mx-auto") do |f| %>
+    <div class="flex items-end gap-2">
+      <div class="flex-1 relative">
+        <%= f.text_area :content, 
+            rows: 1, 
+            placeholder: "Type a message or /command...", 
+            class: "textarea textarea-bordered w-full pr-12 focus:textarea-primary min-h-[3rem] max-h-48 resize-none py-3 px-6 rounded-3xl bg-base-100 shadow-sm transition-all focus:shadow-md",
+            data: { 
+              slash_commands_target: "input",
+              action: "keydown->slash-commands#handleKeydown input->slash-commands#autoResize"
+            } %>
+        
+        <div class="absolute right-3 bottom-3 flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm btn-square">
+            <i data-lucide="send" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slash Command Menu (Hidden by default) -->
+    <div data-slash-commands-target="menu" class="hidden absolute bottom-full left-0 mb-2 w-64 bg-base-100 border border-base-300 rounded-lg shadow-xl z-50 overflow-hidden">
+      <div class="p-2 text-xs font-bold text-base-content/50 uppercase border-b border-base-200">Commands</div>
+      <ul class="menu menu-sm p-1">
+        <li><a data-action="click->slash-commands#select" data-command="/new-epic ">/new-epic <span class="text-xs opacity-50">Create a new epic</span></a></li>
+        <li><a data-action="click->slash-commands#select" data-command="/prd ">/prd <span class="text-xs opacity-50">Draft a PRD</span></a></li>
+        <li><a data-action="click->slash-commands#select" data-command="/task ">/task <span class="text-xs opacity-50">Add backlog item</span></a></li>
+      </ul>
+    </div>
+  <% end %>
+</div>
