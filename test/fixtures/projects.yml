@@ -1,0 +1,11 @@
+agent_forge:
+  name: Agent-Forge
+  description: The Agent-Forge project
+  project_dir: projects/agent-forge
+  active: true
+
+inactive_project:
+  name: Old Project
+  description: An inactive project
+  project_dir: projects/old-project
+  active: false

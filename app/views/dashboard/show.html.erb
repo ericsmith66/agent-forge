@@ -1,0 +1,128 @@
+<% content_for(:title, "Dashboard — Agent-Forge") %>
+
+<div class="flex h-screen bg-base-100">
+  <%# Sidebar %>
+  <aside class="w-64 bg-base-200 flex flex-col border-r border-base-300">
+    <div class="p-4 border-b border-base-300">
+      <h1 class="text-xl font-bold text-primary">Agent-Forge</h1>
+    </div>
+
+    <nav class="flex-1 p-4 space-y-2">
+      <%= link_to "Dashboard", root_path, class: "btn btn-ghost btn-block justify-start" %>
+    </nav>
+
+    <div class="p-4 border-t border-base-300">
+      <div class="text-xs text-base-content/50">v0.1.0</div>
+    </div>
+  </aside>
+
+  <%# Main content area %>
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <%# Navbar %>
+    <header class="navbar bg-base-200 border-b border-base-300 px-6" data-testid="navbar">
+      <div class="flex-1">
+        <h2 class="text-lg font-semibold" data-testid="current-project-name">
+          <%= @project&.name || "No Projects" %>
+        </h2>
+      </div>
+
+      <div class="flex-none gap-2">
+        <%# Project Switcher %>
+        <% if @projects.any? %>
+          <div class="dropdown dropdown-end" data-controller="project-switcher" data-testid="project-switcher">
+            <label tabindex="0" class="btn btn-ghost btn-sm gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+              </svg>
+              Switch Project
+            </label>
+            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-200 rounded-box w-52">
+              <% @projects.each do |project| %>
+                <li>
+                  <%= link_to project.name,
+                        dashboard_project_path(project),
+                        class: "#{project == @project ? 'active' : ''}" %>
+                </li>
+              <% end %>
+            </ul>
+          </div>
+        <% end %>
+      </div>
+    </header>
+
+    <%# Flash messages %>
+    <% if flash[:alert] %>
+      <div class="alert alert-warning m-4">
+        <span><%= flash[:alert] %></span>
+      </div>
+    <% end %>
+    <% if flash[:notice] %>
+      <div class="alert alert-success m-4">
+        <span><%= flash[:notice] %></span>
+      </div>
+    <% end %>
+
+    <%# Dashboard content %>
+    <main class="flex-1 overflow-y-auto p-6" data-testid="dashboard-content">
+      <% if @project %>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <%# Stats cards %>
+          <div class="stat bg-base-200 rounded-box shadow" data-testid="stat-artifacts">
+            <div class="stat-title">Artifacts</div>
+            <div class="stat-value text-primary"><%= @artifacts.size %></div>
+          </div>
+
+          <div class="stat bg-base-200 rounded-box shadow" data-testid="stat-tasks">
+            <div class="stat-title">Tasks</div>
+            <div class="stat-value text-secondary"><%= @project.tasks.count %></div>
+          </div>
+
+          <div class="stat bg-base-200 rounded-box shadow" data-testid="stat-status">
+            <div class="stat-title">Status</div>
+            <div class="stat-value text-accent"><%= @project.active? ? "Active" : "Inactive" %></div>
+          </div>
+        </div>
+
+        <%# Artifacts list %>
+        <div class="card bg-base-200 shadow">
+          <div class="card-body">
+            <h3 class="card-title">Artifacts</h3>
+            <% if @artifacts.any? %>
+              <div class="overflow-x-auto">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% @artifacts.each do |artifact| %>
+                      <tr>
+                        <td><%= artifact.title %></td>
+                        <td><span class="badge badge-outline"><%= artifact.artifact_type.humanize %></span></td>
+                        <td><span class="badge badge-primary"><%= artifact.status.humanize %></span></td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% else %>
+              <p class="text-base-content/50">No artifacts yet.</p>
+            <% end %>
+          </div>
+        </div>
+      <% else %>
+        <div class="hero min-h-[60vh]">
+          <div class="hero-content text-center">
+            <div class="max-w-md">
+              <h2 class="text-3xl font-bold">Welcome to Agent-Forge</h2>
+              <p class="py-6 text-base-content/70">No projects found. Create your first project to get started.</p>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </main>
+  </div>
+</div>

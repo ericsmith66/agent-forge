@@ -1,0 +1,14 @@
+epic_one:
+  project: agent_forge
+  artifact_type: epic
+  title: "Epic 1 – Bootstrap"
+  status: approved
+  position: 1
+
+prd_one:
+  project: agent_forge
+  parent: epic_one
+  artifact_type: prd
+  title: "PRD 1-01: Scaffold"
+  status: implemented
+  position: 1

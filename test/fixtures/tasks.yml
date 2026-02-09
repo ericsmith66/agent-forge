@@ -1,0 +1,4 @@
+pending_task:
+  project: agent_forge
+  name: "Setup scaffold"
+  status: pending
