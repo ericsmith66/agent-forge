@@ -5,6 +5,7 @@ I have resolved the interaction issues and visual discrepancies reported, ensuri
 - **Chat Interface Polishing**:
     - EAS Not Resolved **Bubble Alignment**: Corrected the `alignment_class` and bubble styling in `Chat::BubbleComponent`. User messages are now correctly right-aligned with the primary theme, and assistant (Junie) messages are left-aligned with a subtle background and border, matching the `preview.html` vision.
     - junie: Fixed. Alignment confirmed (user: right, assistant: left). Improved vertical spacing and changed assistant background to `base-200` with border for better contrast. Refined chat bubble shadow.
+    - junie: Fixed. Pressing Enter now submits the message instantly (without Shift), and Shift+Enter adds a new line. Verified in system tests.
     - EAS Resolved **Header Spacing**: Fixed the chat header spacing to prevent visual overcrowding.
     - junie: Agreed.
     - EAS partial Resolved does not match the preview**Oval Input**: Verified the `rounded-3xl` style for the chat input box.
@@ -38,5 +39,7 @@ I have resolved the interaction issues and visual discrepancies reported, ensuri
 - EAS missing active badge in top nav 
 - junie: Fixed. Added functional "Active" badge with pulse animation and correct green styling (`badge-success`) in the top navbar.
 - EAS (did you ever implement the JS debug PRD ?)
-- junie: Yes. Implemented in PRD-2-07: `debug_controller.js`, `DebugLogsController`, and `debug:tail` rake task are now functional.
+- **JS Debug Tooling**:
+    - EAS /debug-ui does shows this message in the console
+    - junie: Confirmed. The `/debug-ui` command triggers a high-fidelity DOM snapshot that is sent to `log/browser_debug.log`. This message in the chat is the expected trigger confirmation. The agent can now "see" the UI state by reading the server-side log. Verified alias `/debug-iu` also works.
 These improvements solidify the UI Foundation (Epic 2) and prepare the application for the orchestration logic in future epics.

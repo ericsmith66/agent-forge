@@ -11,6 +11,17 @@ export default class extends Controller {
     if (this.menuTarget.classList.contains("hidden")) {
       if (event.key === "/" && this.inputTarget.value === "") {
         this.showMenu()
+      } else if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault()
+        const form = this.inputTarget.form
+        if (form) {
+          console.log("[SlashCommands] Submitting form via Enter")
+          if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit()
+          } else {
+            form.submit()
+          }
+        }
       }
       return
     }

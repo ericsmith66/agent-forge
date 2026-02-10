@@ -155,6 +155,16 @@ Junie sessions may show timeout/keep-alive prompts.
 - Meaningful headings, labels, `aria-*` attributes.
 - Non-visual fallbacks for data-heavy views (tables alongside charts).
 
+### UI & Frontend Troubleshooting
+- **Independent Panes:** UI frequently uses 3-pane layouts. If a pane is blank, check for `turbo_frame_tag` ID mismatches.
+- **HTML Leaks:** Rails view annotations (`<!-- BEGIN ... -->`) break Turbo Frames. Ensure `annotate_rendered_view_with_filenames = false` in `development.rb`.
+- **Check Debug Logs Early:** When UI looks "off" but no terminal error appears, read `log/browser_debug.log` (or run `bin/rails debug:tail`). It captures:
+  - JS errors & warnings.
+  - Resource load failures (404s on CSS/JS).
+  - Turbo Frame missing errors.
+  - DOM health warnings (detected annotations).
+- **Clobber Assets:** If CSS changes aren't reflecting, run `bin/rails assets:clobber`.
+
 ---
 
 ## 6) Testing expectations

@@ -37,10 +37,12 @@ class Coordinator
       )
       reply("Created PRD: #{artifact.title} under #{parent&.title || 'no parent'}")
     when "/help"
-      reply("Available commands: /new-epic <title>, /prd <title>, /status")
+      reply("Available commands: /new-epic <title>, /prd <title>, /status, /debug-ui")
     when "/status"
       counts = @project.artifacts.group(:status).count
       reply("Project Status: #{counts.map { |k, v| "#{k}: #{v}" }.join(', ')}")
+    when "/debug-ui", "/debug-iu"
+      reply("DEBUG_COMMAND_TRIGGER:SNAPSHOT")
     else
       reply("Unknown command: #{command}. Type /help for available commands.")
     end

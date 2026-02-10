@@ -10,9 +10,10 @@ Rails.application.routes.draw do
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
+  post "debug/log", to: "debug_logs#create" if Rails.env.development? || Rails.env.test?
+
   resources :projects, only: [] do
     get "dashboard", to: "dashboard#show", on: :member
-    post "debug/log", to: "debug_logs#create" if Rails.env.development?
     resources :artifacts, only: [:index, :show, :edit, :update]
   end
 

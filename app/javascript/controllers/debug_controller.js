@@ -22,6 +22,58 @@ export default class extends Controller {
     window.onunhandledrejection = (event) => {
       this.log("error", [`Unhandled Rejection: ${event.reason}`])
     }
+
+    // Capture resource errors (404s on CSS/JS/Images)
+    window.addEventListener('error', (event) => {
+      if (event.target && (event.target.tagName === 'LINK' || event.target.tagName === 'SCRIPT' || event.target.tagName === 'IMG')) {
+        this.log("error", [`Resource Load Failure: ${event.target.tagName} ${event.target.src || event.target.href}`])
+      }
+    }, true)
+
+    // Capture Turbo lifecycle events
+    document.addEventListener("turbo:frame-missing", (event) => {
+      const { id, response, visit } = event.detail
+      this.log("error", [`[TURBO] Frame missing: id="${id}"`, { url: visit?.location?.href || response?.url }])
+    })
+
+    document.addEventListener("turbo:error", (event) => {
+      this.log("error", [`[TURBO] Request error`, { url: event.detail.url, status: event.detail.status }])
+    })
+
+    document.addEventListener("turbo:frame-load", (event) => {
+      this.checkDOMHealth()
+    })
+
+    document.addEventListener("turbo:before-stream-render", (event) => {
+      // Check for snapshot trigger in assistant replies
+      const template = event.detail.newStream
+      if (template.innerHTML.includes("DEBUG_COMMAND_TRIGGER:SNAPSHOT")) {
+        this.snapshot()
+      }
+    })
+
+    this.checkDOMHealth()
+  }
+
+  snapshot() {
+    const panes = {
+      sidebar: document.querySelector('aside')?.innerHTML?.substring(0, 1000),
+      viewer: document.querySelector('#artifact_viewer')?.innerHTML?.substring(0, 1000),
+      url: window.location.href
+    }
+    this.log("debug", [`[SNAPSHOT] UI State:`, panes])
+  }
+
+  checkDOMHealth() {
+    // Detect Rails view annotations (<!-- BEGIN ...)
+    const iterator = document.createNodeIterator(document.body, NodeFilter.SHOW_COMMENT)
+    let node
+    while (node = iterator.nextNode()) {
+      if (node.nodeValue.includes("BEGIN app/views") || node.nodeValue.includes("END app/views")) {
+        this.log("warn", [`[DOM] View annotations detected (leaking HTML comments). Ensure annotate_rendered_view_with_filenames is false.`])
+        break
+      }
+    }
   }
 
   log(level, args) {
@@ -46,7 +98,9 @@ export default class extends Controller {
         level: level,
         message: message,
         url: window.location.href,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        viewport: `${window.innerWidth}x${window.innerHeight}`
       })
     }).catch(err => {
       this.originalError.apply(console, ["Failed to send debug log", err])
