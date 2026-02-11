@@ -1,0 +1,77 @@
+# Task: Implement Prefab HTTP Client Service (AiderDesk Evaluation)
+
+Implement the `PrefabClient` service class to query Prefab's REST API at `http://localhost:8080` (configurable).  
+Follow the exact style, structure, error handling, logging, and testing expectations from PRD 1.2.
+
+### Service Class: `PrefabClient`
+Location: `app/services/prefab_client.rb`
+
+#### Required Methods
+1. `homes`  
+   - GET `/homes`  
+   - Returns: Array of home objects or `[]` on failure
+
+2. `rooms(home)`  
+   - GET `/rooms/:home`  
+   - `home` = name or uuid  
+   - Returns: Array of room objects or `[]` on failure
+
+3. `accessories(home, room)`  
+   - GET `/accessories/:home/:room`  
+   - Returns: Array of accessory objects or `[]` on failure
+
+4. `scenes(home)`  
+   - GET `/scenes/:home`  
+   - Returns: Array of scene objects or `[]` on failure
+
+(Optional – implement if time allows)  
+5. `accessory_details(home, room, accessory)`  
+   - GET `/accessories/:home/:room/:accessory`  
+   - Returns: Single accessory object or `nil` on failure
+
+#### Configuration
+- Base URL: `http://localhost:8080` (default)  
+- Override: `ENV['PREFAB_API_URL']`  
+- Timeout: 5 seconds
+
+#### HTTP Client
+- Use `HTTParty`
+
+#### Error Handling & Logging
+- Rescue connection errors, timeouts, non-200 responses, etc.  
+- Log failure via `Rails.logger.error("PrefabClient error: #{e.message}")`
+- Return `[]` for array-returning methods, `nil` for detail method  
+- Define custom error class: `class ConnectionError < StandardError; end`
+
+#### URL Encoding
+- Properly URL-encode all path parameters (home/room names may contain spaces, special characters)
+
+### Testing Requirements
+Location: `spec/services/prefab_client_spec.rb`
+
+Use **WebMock** for stubbing.
+
+Required test coverage:
+- Success case for each method  
+- Failure cases: connection refused, timeout, 500 status, non-JSON body  
+- URL encoding of special characters (e.g. "Mom's House", "Living Room #2")  
+- ENV var override (custom `PREFAB_API_URL`)  
+- Timeout configuration (5 seconds)  
+- Logging on error  
+
+### Success Criteria for this task
+- All required methods implemented  
+- Correct return values on success/failure  
+- URL encoding handled correctly  
+- ENV configuration respected  
+- Errors logged appropriately  
+- Custom `ConnectionError` class defined  
+- RSpec tests pass  
+- RuboCop clean (or minimal justified offenses)
+
+You are allowed to create any needed spec files, but focus on `spec/services/prefab_client_spec.rb`.  
+Use Rails 8+ idioms.  
+Do not add any unnecessary dependencies.  
+After you finish, I will run `rspec` and review the code.
+
+Begin implementation now.

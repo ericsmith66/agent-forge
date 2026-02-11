@@ -33,4 +33,7 @@ module AiderDesk
       end
     end
   end
+
+  # Raised on 504 Gateway Timeout
+  class GatewayTimeoutError < StandardError; end
 end

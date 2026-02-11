@@ -4,6 +4,7 @@ require 'net/http'
 require 'json'
 require 'uri'
 require 'logger'
+require 'ostruct'
 
 require_relative 'api_error'
 
@@ -219,16 +220,28 @@ module AiderDesk
         if load_res.success? && load_res.data
           messages = load_res.data.fetch("messages", [])
           current_count = messages.length
+          state = load_res.data.fetch("state", "unknown")
 
           if current_count > last_msg_count
             new_msgs = messages[last_msg_count..]
-            new_msgs.each { |m| block.call(m) } if block
+            new_msgs.each do |m|
+              # Detect tool calls in assistant messages
+              if m["role"] == "assistant" && m["content"]&.include?("{\"name\":")
+                @logger.info { "AiderDesk Tool Call detected: #{m["content"]&.slice(0, 100)}..." }
+              end
+              block.call(m) if block
+            end
 
             if new_msgs.any? { |m| m["type"] == "response-completed" }
               return load_res
             end
 
             last_msg_count = current_count
+          end
+
+          # If task is idle but not completed, it might be waiting for user input
+          if state == "idle" && last_msg_count > 0
+            @logger.info { "Task #{task_id} is IDLE. It may be waiting for manual approval in the UI." }
           end
         end
 
@@ -317,6 +330,22 @@ module AiderDesk
       })
     end
 
+    def set_architect_model(task_id:, architect_model:, project_dir: resolve_project_dir)
+      post('/api/project/settings/architect-model', body: {
+        "projectDir" => project_dir,
+        "taskId"     => task_id,
+        "architectModel"  => architect_model
+      })
+    end
+
+    def update_task(task_id:, updates:, project_dir: resolve_project_dir)
+      post('/api/project/tasks', body: {
+        "projectDir" => project_dir,
+        "id"         => task_id,
+        "updates"    => updates
+      })
+    end
+
     # ─── Conversation ──────────────────────────────────────────────────────
 
     def interrupt(task_id:, project_dir: resolve_project_dir)
@@ -397,35 +426,56 @@ module AiderDesk
 
       request.basic_auth(@username, @password) if @username && @password
 
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == 'https')
-      http.open_timeout = @open_timeout
-      http.read_timeout = @read_timeout
-      http_response = http.request(request)
+      retries = 0
+      max_retries = 3
+      backoff = 2
 
-      @logger.debug { "Response #{http_response.code}: #{http_response.body&.slice(0, 200)}" }
+      begin
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = (uri.scheme == "https")
+        http.open_timeout = @open_timeout
+        http.read_timeout = @read_timeout
+        http_response = http.request(request)
 
-      response = Response.new(http_response: http_response)
+        @logger.debug { "Response #{http_response.code}: #{http_response.body&.slice(0, 200)}" }
 
-      # Raise specific errors for known failure codes
-      if response.status == 401
-        raise AuthError.new(response) if @raise_on_error
-      elsif !response.success? && @raise_on_error
-        raise ApiError.new(response)
+        # Handle 504 Gateway Timeout inside the rescue block for a cleaner retry
+        if http_response.code == "504"
+          raise GatewayTimeoutError, "504 Gateway Timeout"
+        end
+
+        response = Response.new(http_response: http_response)
+
+        # Raise specific errors for known failure codes
+        if response.status == 401
+          raise AuthError.new(response) if @raise_on_error
+        elsif !response.success? && @raise_on_error
+          raise ApiError.new(response)
+        end
+
+        response
+      rescue GatewayTimeoutError => e
+        if retries < max_retries
+          retries += 1
+          wait_time = backoff**retries
+          @logger.warn { "#{e.message} on #{uri}. Retrying in #{wait_time}s... (Attempt #{retries}/#{max_retries})" }
+          sleep wait_time
+          retry
+        end
+        @logger.error { "Max retries reached for #{uri}: #{e.message}" }
+        Response.new(error: e.message, http_response: OpenStruct.new(code: 504, body: e.message))
+      rescue AuthError, ApiError
+        raise
+      rescue Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::EHOSTUNREACH, SocketError => e
+        @logger.error { "Connection failed: #{e.message}" }
+        raise ConnectionError.new(@base_url, e) if @raise_on_error
+        Response.new(error: "Connection failed: #{e.message}")
+      rescue => e
+        @logger.error { "Request failed: #{e.message}" }
+        response = Response.new(error: e.message)
+        raise ApiError.new(response) if @raise_on_error
+        response
       end
-
-      response
-    rescue AuthError, ApiError
-      raise
-    rescue Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::EHOSTUNREACH, SocketError => e
-      @logger.error { "Connection failed: #{e.message}" }
-      raise ConnectionError.new(@base_url, e) if @raise_on_error
-      Response.new(error: "Connection failed: #{e.message}")
-    rescue => e
-      @logger.error { "Request failed: #{e.message}" }
-      response = Response.new(error: e.message)
-      raise ApiError.new(response) if @raise_on_error
-      response
     end
   end
 end
