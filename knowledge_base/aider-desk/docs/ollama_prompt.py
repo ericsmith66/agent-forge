@@ -1,977 +1,911 @@
-#!/usr/bin/env python3
-"""
-General-purpose AiderDesk + Ollama prompt runner with CLI arguments.
+#!/usr/bin/env ruby
+# frozen_string_literal: true
 
-Converted from test_ollama_submission.py with comprehensive improvements:
-- Ollama health check and model warm-up (eliminates cold-start zombies)
-- Structured error classification (replaces generic "zombie" diagnosis)
-- Stale-chunk detection and per-phase timing metrics
-- Ollama error pattern detection in log tailer
-- Configurable via CLI: prompt, model, debug level, retries, timeout, edit format, mode
-- Optional --prompt-file to load prompt text from a file
+=begin
+General-purpose AiderDesk + Ollama prompt runner (Ruby).
+
+Ruby port of knowledge_base/ollama_prompt.py with two transport modes:
+  --transport socketio  (default) Engine.IO HTTP long-polling for real-time events
+  --transport rest      REST polling via /api/project/tasks/load (fallback)
+
+Features:
+- Ollama health check + warm-up (keeps model loaded)
+- Structured failure classification
+- Stale-chunk detection and per-phase timing
+- Log tailing with Ollama error pattern detection
+- CLI options: prompt, model, retries, timeout, mode, edit format, transport, etc.
+
+Limitations / Ruby-specific notes:
+- Socket.IO is implemented via Engine.IO HTTP long-polling (pure stdlib).
+  This gives real-time event parity with the Python version without any gems.
+- REST transport polls /api/project/tasks/load and may miss some events.
+- Uses only Ruby stdlib (Net::HTTP, JSON, OptionParser, Thread, etc.).
 
 Usage:
-    python3 knowledge_base/ollama_prompt.py --prompt "Create hello.rb that prints hello world"
-    python3 knowledge_base/ollama_prompt.py --prompt-file my_prompt.txt
-    python3 knowledge_base/ollama_prompt.py --model ollama/qwen2.5-coder:32b --timeout 180 --retries 5
-    python3 knowledge_base/ollama_prompt.py --debug --edit-format whole --mode agent
+  ruby knowledge_base/ollama_prompt.rb --prompt "Create hello.rb that prints hello world"
+  ruby knowledge_base/ollama_prompt.rb --transport rest --timeout 180
+  ruby knowledge_base/ollama_prompt.rb --debug --edit-format whole --mode agent
+=end
 
-Prerequisites:
-    - AiderDesk running on localhost:24337
-    - Ollama running with the target model pulled
-    - pip install requests python-socketio[client]
+require 'net/http'
+require 'json'
+require 'uri'
+require 'optparse'
+require 'base64'
 
-Python-only components (must be re-implemented for Ruby port):
-    - argparse (CLI parsing)        → Ruby: OptionParser or Thor gem
-    - requests (HTTP client)         → Ruby: Net::HTTP, Faraday, or HTTParty gem
-    - python-socketio (Socket.IO)    → Ruby: socketio-client or faye-websocket gem
-    - threading.Thread (concurrency) → Ruby: Thread class (built-in)
-    - threading.Event (signalling)   → Ruby: use Mutex + ConditionVariable or Queue
-    - base64 (encoding)              → Ruby: Base64 module (stdlib)
-    - json (serialisation)           → Ruby: JSON module (stdlib)
-    - os.path (file operations)      → Ruby: File, Dir, Pathname (stdlib)
-    - datetime (timestamps)          → Ruby: Time class (built-in)
-"""
+$debug = false
 
-# ── Python-only: standard library imports ───────────────────────────────────
-# Ruby equivalents noted inline for future port.
-import argparse          # Ruby: OptionParser (stdlib) or Thor gem
-import base64            # Ruby: Base64 (stdlib)
-import json              # Ruby: JSON (stdlib)
-import os                # Ruby: File, Dir, Pathname (stdlib)
-import sys               # Ruby: $stdout, $stderr, exit()
-import threading         # Ruby: Thread, Mutex, ConditionVariable (built-in)
-import time              # Ruby: Time.now, sleep()
-from datetime import datetime  # Ruby: Time.now.strftime
+OLLAMA_ERROR_PATTERNS = %w[error out\ of\ memory cuda failed\ to\ load context\ length\ exceeded connection\ refused].freeze
+STALE_CHUNK_TIMEOUT = 30
 
-# ── Python-only: third-party dependencies ────────────────────────────────────
-# These must be installed via pip; Ruby equivalents noted.
-import requests                    # Ruby: Net::HTTP (stdlib), Faraday, or HTTParty gem
-from requests.auth import HTTPBasicAuth  # Ruby: Net::HTTP basic_auth or Faraday middleware
-import socketio                    # Ruby: socketio-client gem or faye-websocket gem
+def ts
+  Time.now.strftime('%Y-%m-%dT%H:%M:%S.%L')
+end
 
+def log(level, msg)
+  return if level == 'DEBUG' && !$debug
+  puts "#{ts} [#{level}] #{msg}"
+end
 
-# ── Globals (set from CLI args in main) ──────────────────────────────────────
+module FailureReason
+  COLD_START = 'cold_start'
+  PARTIAL_RESPONSE = 'partial'
+  QUESTION_UNANSWERED = 'question'
+  CONNECTION_ERROR = 'connection'
+  OLLAMA_ERROR = 'ollama_error'
+  UNKNOWN = 'unknown'
+end
 
-DEBUG = False
+def classify_failure(monitor_snap, prompt_result, elapsed)
+  if monitor_snap[:chunks_received].zero?
+    return elapsed > 60 ? FailureReason::COLD_START : FailureReason::CONNECTION_ERROR
+  end
+  return FailureReason::QUESTION_UNANSWERED if monitor_snap[:question_pending]
+  if prompt_result[:error]
+    err = prompt_result[:error].downcase
+    return FailureReason::CONNECTION_ERROR if err.include?('timeout') || err.include?('connection')
+    return FailureReason::OLLAMA_ERROR
+  end
+  return FailureReason::PARTIAL_RESPONSE if monitor_snap[:chunks_received] > 0
+  FailureReason::UNKNOWN
+end
 
+# ── HTTP helpers ─────────────────────────────────────────────────────────────
 
-# ── Timestamp / logging ─────────────────────────────────────────────────────
-# PORTABLE: These are simple string formatting + print functions.
-# Ruby: Time.now.strftime("%Y-%m-%dT%H:%M:%S.%L") and puts/STDOUT.flush
+def http_request(method, url, timeout: 30, username: nil, password: nil, payload: nil)
+  uri = URI(url)
+  req = case method
+        when :get  then Net::HTTP::Get.new(uri)
+        when :post then Net::HTTP::Post.new(uri)
+        else raise ArgumentError, "Unsupported: #{method}"
+        end
+  req.basic_auth(username, password) if username
+  if payload
+    req['Content-Type'] = 'application/json'
+    req.body = JSON.generate(payload)
+  end
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = (uri.scheme == 'https')
+  http.read_timeout = timeout
+  http.open_timeout = [timeout, 30].min
+  response = http.request(req)
+  [response.code.to_i, response.body]
+rescue StandardError => e
+  [0, e.message]
+end
 
-def ts():
-    """ISO-8601 timestamp for log cross-referencing with AiderDesk logs."""
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+def api_get(api_url, path, username:, password:, timeout: 30)
+  url = "#{api_url}#{path}"
+  log('DEBUG', "GET  #{url}")
+  status, body = http_request(:get, url, timeout: timeout, username: username, password: password)
+  log('DEBUG', "  -> #{status} (#{body.to_s.bytesize}B)")
+  [status, body]
+end
 
+def api_post(api_url, path, payload, username:, password:, timeout: 30)
+  url = "#{api_url}#{path}"
+  log('DEBUG', "POST #{url}  body=#{(payload ? JSON.generate(payload) : 'null')[0, 200]}")
+  status, body = http_request(:post, url, timeout: timeout, username: username, password: password, payload: payload)
+  log('DEBUG', "  -> #{status} (#{body.to_s.bytesize}B)")
+  [status, body]
+end
 
-def log(level, msg):
-    """Print a timestamped log line. DEBUG-level lines are suppressed unless --debug."""
-    if level == "DEBUG" and not DEBUG:
-        return
-    print(f"{ts()} [{level}] {msg}", flush=True)
+def parse_json(body)
+  return nil if body.nil? || body.strip.empty?
+  JSON.parse(body)
+rescue JSON::ParserError
+  nil
+end
 
+# ── Ollama helpers ───────────────────────────────────────────────────────────
 
-# ── Failure classification ───────────────────────────────────────────────────
-# PORTABLE: Pure data + logic, no Python-specific dependencies.
-# Ruby: use a module with constants or a simple class with class methods.
+def check_ollama_health(model, ollama_url)
+  status, body = http_request(:get, "#{ollama_url}/api/tags", timeout: 5)
+  return false unless status == 200
+  models = (parse_json(body) || {}).fetch('models', []).map { |m| m['name'] }
+  short = model.sub(%r{\Aollama/}, '')
+  if models.any? { |n| n.include?(short) }
+    log('PASS', "Ollama healthy, model #{short} available")
+    true
+  else
+    log('FAIL', "Model #{short} not found. Available: #{models}")
+    false
+  end
+rescue StandardError => e
+  log('FAIL', "Cannot reach Ollama: #{e}")
+  false
+end
 
-class FailureReason:
-    COLD_START = "cold_start"
-    PARTIAL_RESPONSE = "partial"
-    QUESTION_UNANSWERED = "question"
-    CONNECTION_ERROR = "connection"
-    OLLAMA_ERROR = "ollama_error"
-    UNKNOWN = "unknown"
+def check_ollama_running_models(ollama_url)
+  status, body = http_request(:get, "#{ollama_url}/api/ps", timeout: 5)
+  return [] unless status == 200
+  models = (parse_json(body) || {}).fetch('models', [])
+  models.each { |m| log('OLLAMA', "  Loaded: #{m['name']} (size=#{m['size'] || '?'})") }
+  models
+rescue StandardError
+  []
+end
 
+def warm_up_ollama(model, timeout:, ollama_url:)
+  short = model.sub(%r{\Aollama/}, '')
+  log('INFO', "Warming up Ollama model: #{short} (may take several minutes)...")
+  status, body = http_request(:post, "#{ollama_url}/api/generate", timeout: timeout,
+                               payload: { model: short, prompt: 'hi', stream: false, keep_alive: '24h' })
+  if status == 200
+    log('PASS', "Model #{short} is warm and ready")
+    true
+  else
+    log('WARN', "Warm-up returned #{status}: #{body.to_s[0, 200]}")
+    false
+  end
+rescue StandardError => e
+  log('WARN', "Warm-up failed: #{e}")
+  false
+end
 
-def classify_failure(monitor, prompt_result, elapsed):
-    """Return a structured failure reason instead of generic 'zombie'."""
-    if monitor.chunks_received == 0:
-        if elapsed > 60:
-            return FailureReason.COLD_START
-        return FailureReason.CONNECTION_ERROR
+# ── Log tailer ───────────────────────────────────────────────────────────────
 
-    if monitor.question_pending.is_set():
-        return FailureReason.QUESTION_UNANSWERED
-
-    if prompt_result.get("error"):
-        error_str = str(prompt_result["error"]).lower()
-        if "timeout" in error_str or "connection" in error_str:
-            return FailureReason.CONNECTION_ERROR
-        return FailureReason.OLLAMA_ERROR
-
-    if monitor.chunks_received > 0:
-        return FailureReason.PARTIAL_RESPONSE
-
-    return FailureReason.UNKNOWN
-
-
-# ── Ollama health & warm-up ─────────────────────────────────────────────────
-# PYTHON-ONLY: Uses requests library for HTTP calls.
-# Ruby: replace requests.get/post with Net::HTTP or Faraday equivalents.
-
-def check_ollama_health(model="qwen2.5-coder:32b", ollama_url="http://localhost:11434"):
-    """Verify Ollama is running and the model is available."""
-    try:
-        r = requests.get(f"{ollama_url}/api/tags", timeout=5)
-        if r.status_code != 200:
-            log("FAIL", f"Ollama not responding: HTTP {r.status_code}")
-            return False
-
-        models = [m["name"] for m in r.json().get("models", [])]
-        short_model = model.replace("ollama/", "")
-        if not any(short_model in m for m in models):
-            log("FAIL", f"Model {short_model} not found. Available: {models}")
-            return False
-
-        log("PASS", f"Ollama healthy, model {short_model} available")
-        return True
-    except Exception as e:
-        log("FAIL", f"Cannot reach Ollama: {e}")
-        return False
-
-
-def check_ollama_running_models(ollama_url="http://localhost:11434"):
-    """Check what models Ollama currently has loaded."""
-    try:
-        r = requests.get(f"{ollama_url}/api/ps", timeout=5)
-        if r.status_code == 200:
-            models = r.json().get("models", [])
-            for m in models:
-                log("OLLAMA", f"  Loaded: {m['name']} (size={m.get('size', '?')}, "
-                              f"expires={m.get('expires_at', '?')})")
-            return models
-        return []
-    except Exception:
-        return []
-
-
-def warm_up_ollama(model="qwen2.5-coder:32b", timeout=300, ollama_url="http://localhost:11434"):
-    """Send a trivial prompt to force model loading into memory."""
-    short_model = model.replace("ollama/", "")
-    log("INFO", f"Warming up Ollama model: {short_model} (may take several minutes)...")
-    try:
-        r = requests.post(
-            f"{ollama_url}/api/generate",
-            json={
-                "model": short_model,
-                "prompt": "hi",
-                "stream": False,
-                "keep_alive": "24h",
-            },
-            timeout=timeout,
-        )
-        if r.status_code == 200:
-            log("PASS", f"Model {short_model} is warm and ready")
-            return True
-        else:
-            log("WARN", f"Warm-up returned {r.status_code}: {r.text[:200]}")
-            return False
-    except requests.exceptions.Timeout:
-        log("WARN", f"Warm-up timed out after {timeout}s — model may still be loading")
-        return False
-    except Exception as e:
-        log("WARN", f"Warm-up failed: {e}")
-        return False
-
-
-# ── AiderDesk API helpers ────────────────────────────────────────────────────
-# PYTHON-ONLY: Uses requests library with HTTPBasicAuth.
-# Ruby: use Net::HTTP with req.basic_auth(user, pass), or Faraday basic_auth.
-
-def api_get(api_url, auth, path, **kwargs):
-    url = f"{api_url}{path}"
-    log("DEBUG", f"GET  {url}")
-    r = requests.get(url, auth=auth, timeout=30, **kwargs)
-    log("DEBUG", f"  -> {r.status_code} ({len(r.content)}B)")
-    return r
-
-
-def api_post(api_url, auth, path, payload=None, timeout=30, **kwargs):
-    url = f"{api_url}{path}"
-    body_preview = json.dumps(payload, separators=(',', ':'))[:200] if payload else "null"
-    log("DEBUG", f"POST {url}  body={body_preview}")
-    r = requests.post(url, auth=auth, json=payload, timeout=timeout, **kwargs)
-    log("DEBUG", f"  -> {r.status_code} ({len(r.content)}B)")
-    return r
-
-
-def health_check(api_url, auth):
-    try:
-        r = requests.get(f"{api_url}/settings", auth=auth, timeout=5)
-        return r.status_code == 200
-    except Exception:
-        return False
-
+def start_log_tailer(log_path, label)
+  stop = { stop: false }
+  Thread.new do
+    unless File.exist?(log_path)
+      log('WARN', "#{label} log not found at #{log_path} — tailing disabled")
+      Thread.exit
+    end
+    File.open(log_path, 'r') do |f|
+      f.seek(0, IO::SEEK_END)
+      until stop[:stop]
+        line = f.gets
+        if line
+          line = line.strip
+          next if line.empty?
+          if label == 'OLLAMA' && OLLAMA_ERROR_PATTERNS.any? { |p| line.downcase.include?(p) }
+            log('OLLAMA-ERR', "⚠️  #{line}")
+          else
+            log(label, line)
+          end
+        else
+          sleep 0.5
+        end
+      end
+    end
+  rescue StandardError => e
+    log('WARN', "#{label} log tailer error: #{e}")
+  end
+  stop
+end
 
 # ── Background prompt sender ────────────────────────────────────────────────
-# PYTHON-ONLY: Uses threading.Thread for async HTTP call.
-# Ruby: use Thread.new { ... } with a shared hash/struct for the result.
 
-def fire_prompt_async(api_url, auth, project_dir, task_id, prompt, mode="code"):
-    """Fire run-prompt in a background thread. Returns a dict holding the result."""
-    result = {"status": None, "error": None, "done": False}
+def fire_prompt_async(api_url, username, password, project_dir, task_id, prompt, mode)
+  result = { status: nil, error: nil, done: false }
+  Thread.new do
+    begin
+      status, _body = api_post(api_url, '/run-prompt',
+                               { projectDir: project_dir, taskId: task_id, prompt: prompt, mode: mode },
+                               username: username, password: password, timeout: 300)
+      result[:status] = status
+    rescue StandardError => e
+      result[:error] = e.message
+    ensure
+      result[:done] = true
+    end
+  end
+  log('INFO', 'run-prompt fired in background thread')
+  result
+end
 
-    def _run():
-        try:
-            r = requests.post(
-                f"{api_url}/run-prompt",
-                auth=auth,
-                json={
-                    "projectDir": project_dir,
-                    "taskId": task_id,
-                    "prompt": prompt,
-                    "mode": mode,
-                },
-                timeout=300,
-            )
-            result["status"] = r.status_code
-        except Exception as e:
-            result["error"] = str(e)
-        finally:
-            result["done"] = True
+# ── Socket.IO Monitor (Engine.IO HTTP long-polling, pure stdlib) ─────────────
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    log("INFO", f"run-prompt fired in background thread (tid={t.ident})")
-    return result, t
+class SocketIOMonitor
+  def initialize(base_url:, project_dir:, username:, password:)
+    @base_url = base_url
+    @project_dir = project_dir
+    @creds = Base64.strict_encode64("#{username}:#{password}")
+    @sid = nil
+    @poll_thread = nil
+    @ping_thread = nil
+    @stop = false
+    @ping_interval = 25
 
+    @task_id = 'pending'
+    @completed = false
+    @question_pending = false
+    @question_text = nil
+    @file_dropped = false
+    @chunks_received = 0
+    @response_completed_count = 0
+    @last_activity = Time.now
+    @mx = Mutex.new
+  end
 
-# ── Log file tailer ─────────────────────────────────────────────────────────
-# PYTHON-ONLY: Uses threading.Thread + threading.Event for background file tailing.
-# Ruby: use Thread.new with File.open and IO#gets in a loop; signal via Queue or flag.
+  def connect
+    uri = URI("#{@base_url}/socket.io/?EIO=4&transport=polling")
+    resp = eio_get(uri)
+    return false unless resp && resp.code == '200' && resp.body.start_with?('0{')
 
-OLLAMA_ERROR_PATTERNS = [
-    "error",
-    "out of memory",
-    "cuda",
-    "failed to load",
-    "context length exceeded",
-    "connection refused",
-]
+    data = JSON.parse(resp.body[1..])
+    @sid = data['sid']
+    @ping_interval = (data['pingInterval'] || 25_000) / 1000.0
+    log('SIO', "Engine.IO connected (sid=#{@sid})")
 
+    return false unless eio_post('40')
 
-def start_log_tailer(log_path, label):
-    """Start a background thread that tails a log file and prints new lines."""
-    stop_event = threading.Event()
+    ack = eio_get(poll_uri)
+    if ack && ack.body&.start_with?('40')
+      log('SIO', '✅ Connected to AiderDesk Socket.IO')
+    else
+      log('SIO', "Connect ack unexpected: #{ack&.body&.slice(0, 100)}")
+    end
 
-    def _tail():
-        if not os.path.exists(log_path):
-            log("WARN", f"{label} log not found at {log_path} — tailing disabled")
-            return
-        try:
-            with open(log_path, "r") as f:
-                f.seek(0, 2)
-                while not stop_event.is_set():
-                    line = f.readline()
-                    if line:
-                        line = line.rstrip()
-                        if line:
-                            # Detect Ollama errors in log lines
-                            if label == "OLLAMA" and any(
-                                p in line.lower() for p in OLLAMA_ERROR_PATTERNS
-                            ):
-                                log("OLLAMA-ERR", f"⚠️  {line}")
-                            else:
-                                log(label, line)
-                    else:
-                        stop_event.wait(0.5)
-        except Exception as e:
-            log("WARN", f"{label} log tailer error: {e}")
+    sub = JSON.generate(['message', {
+      'action' => 'subscribe-events',
+      'eventTypes' => %w[response-chunk response-completed ask-question question-answered
+                         user-message log tool context-files-updated task-completed task-cancelled],
+      'baseDirs' => [@project_dir]
+    }])
+    eio_post("42#{sub}")
+    log('SIO', "Subscribed to events for #{@project_dir}")
 
-    t = threading.Thread(target=_tail, daemon=True)
-    t.start()
-    return stop_event
+    @stop = false
+    @poll_thread = Thread.new { poll_loop }
+    @ping_thread = Thread.new { ping_loop }
+    true
+  rescue StandardError => e
+    log('SIO', "❌ Connection failed: #{e}")
+    false
+  end
 
+  def disconnect
+    @stop = true
+    @poll_thread&.join(3)
+    @ping_thread&.join(3)
+    eio_post('1') if @sid
+  rescue StandardError
+    nil
+  end
 
-# ── Socket.IO event monitor ─────────────────────────────────────────────────
+  def update_task_id(new_id)
+    @mx.synchronize do
+      @task_id = new_id
+      @completed = false
+      @question_pending = false
+      @question_text = nil
+      @file_dropped = false
+      @chunks_received = 0
+      @response_completed_count = 0
+      @last_activity = Time.now
+    end
+  end
 
-STALE_CHUNK_TIMEOUT = 30  # seconds with no new chunks
+  def completed?()                @mx.synchronize { @completed } end
+  def question_pending?()          @mx.synchronize { @question_pending } end
+  def question_text()             @mx.synchronize { @question_text } end
+  def file_dropped?()             @mx.synchronize { @file_dropped } end
+  def chunks_received()           @mx.synchronize { @chunks_received } end
+  def response_completed_count()  @mx.synchronize { @response_completed_count } end
+  def last_activity()             @mx.synchronize { @last_activity } end
+  def clear_question()            @mx.synchronize { @question_pending = false } end
 
+  def snapshot
+    @mx.synchronize do
+      { completed: @completed, question_pending: @question_pending, question_text: @question_text,
+        file_dropped: @file_dropped, chunks_received: @chunks_received,
+        response_completed_count: @response_completed_count, last_activity: @last_activity }
+    end
+  end
 
-# PYTHON-ONLY: Uses python-socketio for real-time event monitoring.
-# Ruby: use the socketio-client gem, or faye-websocket + manual event-type dispatch.
-# The threading.Event objects used for signalling should become Mutex + ConditionVariable
-# or a simple Queue-based flag in the Ruby version.
+  private
 
-class EventMonitor:
-    """
-    Connects to AiderDesk via Socket.IO and subscribes to real-time events.
-    Tracks response-completed, ask-question, response-chunk, log, and tool events.
-    """
+  def poll_uri
+    URI("#{@base_url}/socket.io/?EIO=4&transport=polling&sid=#{@sid}")
+  end
 
-    def __init__(self, task_id, base_url, project_dir):
-        self.task_id = task_id
-        self.base_url = base_url
-        self.project_dir = project_dir
-        self.completed = threading.Event()
-        self.question_pending = threading.Event()
-        self.question_text = None
-        self.file_dropped = False
-        self.chunks_received = 0
-        self.last_activity = time.time()
-        self.sio = socketio.Client(logger=False, engineio_logger=False)
-        self._setup_handlers()
+  def eio_get(uri)
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = (uri.scheme == 'https')
+    http.read_timeout = 30
+    http.open_timeout = 10
+    req = Net::HTTP::Get.new(uri)
+    req['Authorization'] = "Basic #{@creds}"
+    http.request(req)
+  rescue StandardError => e
+    log('DEBUG', "EIO GET error: #{e}")
+    nil
+  end
 
-    def _setup_handlers(self):
-        @self.sio.on('connect')
-        def on_connect():
-            log("SIO", "✅ Connected to AiderDesk Socket.IO")
-            self.sio.emit('message', {
-                'action': 'subscribe-events',
-                'eventTypes': [
-                    'response-chunk',
-                    'response-completed',
-                    'ask-question',
-                    'question-answered',
-                    'user-message',
-                    'log',
-                    'tool',
-                    'context-files-updated',
-                    'task-completed',
-                    'task-cancelled',
-                ],
-                'baseDirs': [self.project_dir],
-            })
-            log("SIO", f"Subscribed to events for {self.project_dir}")
+  def eio_post(body)
+    uri = poll_uri
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = (uri.scheme == 'https')
+    http.read_timeout = 10
+    http.open_timeout = 10
+    req = Net::HTTP::Post.new(uri)
+    req['Authorization'] = "Basic #{@creds}"
+    req['Content-Type'] = 'text/plain;charset=UTF-8'
+    req.body = body
+    http.request(req).code == '200'
+  rescue StandardError => e
+    log('DEBUG', "EIO POST error: #{e}")
+    false
+  end
 
-        @self.sio.on('disconnect')
-        def on_disconnect():
-            log("SIO", "Disconnected from AiderDesk Socket.IO")
+  def poll_loop
+    until @stop
+      begin
+        resp = eio_get(poll_uri)
+        parse_packets(resp.body) if resp && resp.code == '200'
+      rescue StandardError => e
+        log('DEBUG', "Poll error: #{e}") unless @stop
+        sleep 1
+      end
+    end
+  end
 
-        @self.sio.on('event')
-        def on_event(payload):
-            event_type = payload.get('type', 'unknown')
-            data = payload.get('data', {})
-            event_task = data.get('taskId', '')
+  def ping_loop
+    until @stop
+      sleep @ping_interval
+      break if @stop
+      eio_post('3')
+    end
+  rescue StandardError
+    nil
+  end
 
-            if event_task and event_task != self.task_id:
-                return
+  def parse_packets(raw)
+    return if raw.nil? || raw.empty?
+    packets = raw.include?("\x1e") ? raw.split("\x1e") : [raw]
+    packets.each do |pkt|
+      next if pkt.empty?
+      case pkt[0]
+      when '2' then eio_post('3')
+      when '4' then handle_sio_packet(pkt[1..])
+      end
+    end
+  end
 
-            self.last_activity = time.time()
+  def handle_sio_packet(data)
+    return unless data && data[0] == '2'
+    arr = JSON.parse(data[1..])
+    handle_event(arr[1]) if arr.is_a?(Array) && arr[0] == 'event'
+  rescue JSON::ParserError
+    nil
+  end
 
-            if event_type == 'response-chunk':
-                self.chunks_received += 1
-                content = str(data.get('content') or data.get('chunk') or '')
-                if self.chunks_received <= 5 or self.chunks_received % 20 == 0:
-                    preview = (content[:100] + '...') if len(content) > 100 else content
-                    log("SIO", f"  [chunk #{self.chunks_received}] {preview}")
+  def handle_event(payload)
+    return unless payload.is_a?(Hash)
+    et = payload['type'] || 'unknown'
+    d  = payload['data'] || {}
+    tid = d['taskId'] || ''
 
-                if 'dropping' in content.lower():
-                    self.file_dropped = True
-                    log("DETECT", "⚠️  Aider dropped a file from chat context")
+    @mx.synchronize do
+      return if !tid.empty? && tid != @task_id
+      @last_activity = Time.now
 
-            elif event_type == 'response-completed':
-                content = str(data.get('content') or '')
-                preview = (content[:150] + '...') if len(content) > 150 else content
-                log("SIO", f"  ✅ [response-completed] {preview}")
-                self.completed.set()
+      case et
+      when 'response-chunk'
+        @chunks_received += 1
+        c = (d['content'] || d['chunk'] || '').to_s
+        if @chunks_received <= 5 || (@chunks_received % 20).zero?
+          log('SIO', "  [chunk ##{@chunks_received}] #{c[0, 100]}")
+        end
+        @file_dropped = true if c.downcase.include?('dropping')
+      when 'response-completed'
+        @response_completed_count += 1
+        c = (d['content'] || '').to_s
+        log('SIO', "  [response-completed ##{@response_completed_count}] #{c[0, 150]}")
+        # NOTE: Do NOT set @completed here. In agent mode, response-completed
+        # fires after each agent step, not when the full task is done.
+        # Only task-completed / task-cancelled signals true completion.
+      when 'ask-question'
+        @question_text = (d['question'] || d['content'] || d.to_s).to_s[0, 200]
+        @question_pending = true
+        log('SIO', "  ❓ [ask-question] #{@question_text}")
+      when 'question-answered'
+        log('SIO', '  [question-answered]')
+        @question_pending = false
+      when 'log'
+        c = (d['content'] || d['message'] || '').to_s
+        log('SIO', "  [log/#{d['level'] || 'info'}] #{c[0, 120]}")
+        @file_dropped = true if c.downcase.include?('dropping')
+      when 'tool'
+        log('SIO', "  [tool] #{(d['content'] || '').to_s[0, 120]}")
+      when 'user-message'
+        log('SIO', "  [user-message] #{(d['content'] || '').to_s[0, 120]}")
+      when 'task-completed', 'task-cancelled'
+        log('SIO', "  [#{et}]")
+        @completed = true
+      when 'context-files-updated'
+        log('SIO', "  [context-files-updated] #{(d['files'] || []).length} file(s)")
+      else
+        log('DEBUG', "  [#{et}] (unhandled)")
+      end
+    end
+  end
+end
 
-            elif event_type == 'ask-question':
-                q = data.get('question') or data.get('content') or str(data)
-                q_text = str(q)[:200]
-                self.question_text = q_text
-                self.question_pending.set()
-                log("SIO", f"  ❓ [ask-question] {q_text}")
+# ── REST polling monitor (fallback) ─────────────────────────────────────────
 
-            elif event_type == 'question-answered':
-                log("SIO", "  [question-answered]")
-                self.question_pending.clear()
+class RestMonitor
+  def initialize(api_url:, project_dir:, username:, password:)
+    @api_url = api_url
+    @project_dir = project_dir
+    @username = username
+    @password = password
+    @task_id = 'pending'
+    @completed = false
+    @question_pending = false
+    @question_text = nil
+    @file_dropped = false
+    @chunks_received = 0
+    @response_completed_count = 0
+    @last_activity = Time.now
+    @seen_ids = {}
+  end
 
-            elif event_type == 'log':
-                content = str(data.get('content') or data.get('message') or '')
-                level = data.get('level', 'info')
-                preview = (content[:120] + '...') if len(content) > 120 else content
-                log("SIO", f"  [log/{level}] {preview}")
+  def connect
+    log('REST', 'Using REST polling transport (no real-time events)')
+    true
+  end
 
-                if 'dropping' in content.lower():
-                    self.file_dropped = True
-                    log("DETECT", "⚠️  Aider dropped a file from chat context")
+  def disconnect; end
 
-            elif event_type == 'tool':
-                content = str(data.get('content') or '')
-                preview = (content[:120] + '...') if len(content) > 120 else content
-                log("SIO", f"  [tool] {preview}")
+  def update_task_id(new_id)
+    @task_id = new_id
+    @completed = false
+    @question_pending = false
+    @question_text = nil
+    @file_dropped = false
+    @chunks_received = 0
+    @response_completed_count = 0
+    @last_activity = Time.now
+    @seen_ids = {}
+  end
 
-            elif event_type == 'user-message':
-                content = str(data.get('content') or '')
-                preview = (content[:120] + '...') if len(content) > 120 else content
-                log("SIO", f"  [user-message] {preview}")
+  def completed?()                @completed end
+  def question_pending?()          @question_pending end
+  def question_text()             @question_text end
+  def file_dropped?()             @file_dropped end
+  def chunks_received()           @chunks_received end
+  def response_completed_count()  @response_completed_count end
+  def last_activity()             @last_activity end
+  def clear_question()            @question_pending = false end
 
-            elif event_type in ('task-completed', 'task-cancelled'):
-                log("SIO", f"  [{event_type}]")
-                self.completed.set()
+  def snapshot
+    { completed: @completed, question_pending: @question_pending, question_text: @question_text,
+      file_dropped: @file_dropped, chunks_received: @chunks_received,
+      response_completed_count: @response_completed_count, last_activity: @last_activity }
+  end
 
-            elif event_type == 'context-files-updated':
-                files = data.get('files', [])
-                log("SIO", f"  [context-files-updated] {len(files)} file(s)")
+  # Called once per loop iteration from the main thread
+  def poll_once
+    status, body = api_post(@api_url, '/project/tasks/load',
+                            { projectDir: @project_dir, id: @task_id },
+                            username: @username, password: @password)
+    return unless status == 200
 
-            else:
-                log("DEBUG", f"  [{event_type}] (unhandled)")
+    messages = (parse_json(body) || {}).fetch('messages', [])
+    messages.each do |msg|
+      mid = msg['id'] || msg.object_id.to_s
+      next if @seen_ids[mid]
+      @seen_ids[mid] = true
+      @last_activity = Time.now
 
-    def connect(self, username, password):
-        """Connect to AiderDesk Socket.IO server."""
-        creds = base64.b64encode(f"{username}:{password}".encode()).decode()
-        try:
-            self.sio.connect(
-                self.base_url,
-                headers={"Authorization": f"Basic {creds}"},
-                wait_timeout=10,
-            )
-            return True
-        except Exception as e:
-            log("SIO", f"❌ Connection failed: {e}")
-            return False
+      case msg['type']
+      when 'response-chunk'
+        @chunks_received += 1
+        c = msg['content'].to_s
+        if @chunks_received <= 5 || (@chunks_received % 20).zero?
+          log('REST', "  [chunk ##{@chunks_received}] #{c[0, 100]}")
+        end
+        @file_dropped = true if c.downcase.include?('dropping')
+      when 'response-completed'
+        @response_completed_count += 1
+        log('REST', "  [response-completed ##{@response_completed_count}] #{msg['content'].to_s[0, 150]}")
+        # NOTE: Do NOT set @completed here. In agent mode, response-completed
+        # fires after each agent step, not when the full task is done.
+      when 'ask-question'
+        @question_text = (msg['question'] || msg['content'] || msg.to_s).to_s[0, 200]
+        @question_pending = true
+        log('REST', "  ❓ [ask-question] #{@question_text}")
+      when 'question-answered'
+        @question_pending = false
+      when 'task-completed', 'task-cancelled'
+        log('REST', "  [#{msg['type']}]")
+        @completed = true
+      end
+    end
+  end
+end
 
-    def disconnect(self):
-        try:
-            self.sio.disconnect()
-        except Exception:
-            pass
+# ── CLI ──────────────────────────────────────────────────────────────────────
 
-    def update_task_id(self, new_task_id):
-        """Update the task ID filter (for retry attempts with new tasks)."""
-        self.task_id = new_task_id
-        self.completed.clear()
-        self.question_pending.clear()
-        self.question_text = None
-        self.file_dropped = False
-        self.chunks_received = 0
-        self.last_activity = time.time()
+def parse_args(argv)
+  args = {
+    prompt: "Create a single file called calculate_pi.rb that calculates Pi to N decimal places, where N is passed as a command-line argument. Keep it simple — under 20 lines.",
+    prompt_file: nil, model: 'ollama/qwen2.5-coder:32b', timeout: 120, retries: 3,
+    mode: 'code', edit_format: nil, transport: 'socketio',
+    base_url: 'http://localhost:24337', ollama_url: 'http://localhost:11434',
+    username: 'admin', password: 'booberry',
+    project_dir: '/Users/ericsmith66/development/agent-forge/projects/eureka-homekit-rebuild',
+    target_file: nil, debug: false, no_warmup: false, no_cleanup: false,
+    no_tail_logs: false, warmup_timeout: 300
+  }
 
-
-# ── CLI argument parsing ─────────────────────────────────────────────────────
-# PYTHON-ONLY: Uses argparse for CLI parsing.
-# Ruby: use OptionParser (stdlib) or the Thor gem for an equivalent CLI interface.
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="General-purpose AiderDesk + Ollama prompt runner",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""\
-Examples:
-  %(prog)s --prompt "Create hello.rb that prints hello world"
-  %(prog)s --prompt-file my_prompt.txt
-  %(prog)s --model ollama/qwen2.5-coder:32b --timeout 180 --retries 5
-  %(prog)s --debug --edit-format whole --mode agent
-  %(prog)s --prompt "Fix the bug in app.py" --no-warmup --no-cleanup
-""",
-    )
-
-    # Required / core
-    parser.add_argument(
-        "--prompt", "-p",
-        default=(
-            "Create a single file called calculate_pi.rb that calculates Pi to N "
-            "decimal places, where N is passed as a command-line argument. "
-            "Keep it simple — under 20 lines."
-        ),
-        help="The prompt to send to AiderDesk (default: calculate_pi.rb demo)",
-    )
-    parser.add_argument(
-        "--prompt-file", "-f",
-        default=None,
-        help="Path to a file containing the prompt text. Overrides --prompt if set.",
-    )
-    parser.add_argument(
-        "--model", "-m",
-        default="ollama/qwen2.5-coder:32b",
-        help="Model identifier (default: ollama/qwen2.5-coder:32b)",
-    )
-
-    # Behaviour
-    parser.add_argument(
-        "--timeout", "-t",
-        type=int, default=120,
-        help="Seconds per attempt before declaring zombie (default: 120)",
-    )
-    parser.add_argument(
-        "--retries", "-r",
-        type=int, default=3,
-        help="Max retry attempts after zombie detection (default: 3)",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["code", "agent", "ask", "architect"],
-        default="code",
-        help="Aider prompt mode (default: code)",
-    )
-    parser.add_argument(
-        "--edit-format",
-        choices=["diff", "whole", "udiff", "editor-diff", "editor-whole"],
-        default=None,
-        help="Edit format to set on the model (default: server default)",
-    )
-
-    # Connection
-    parser.add_argument(
-        "--base-url",
-        default="http://localhost:24337",
-        help="AiderDesk base URL (default: http://localhost:24337)",
-    )
-    parser.add_argument(
-        "--ollama-url",
-        default="http://localhost:11434",
-        help="Ollama API URL (default: http://localhost:11434)",
-    )
-    parser.add_argument(
-        "--username", "-u",
-        default="admin",
-        help="AiderDesk username (default: admin)",
-    )
-    parser.add_argument(
-        "--password",
-        default="booberry",
-        help="AiderDesk password (default: booberry)",
-    )
-
-    # Project
-    parser.add_argument(
-        "--project-dir",
-        default="/Users/ericsmith66/development/agent-forge/projects/eureka-homekit-rebuild",
-        help="AiderDesk project directory",
-    )
-    parser.add_argument(
-        "--target-file",
-        default=None,
-        help="Expected output file path (for on-disk detection). "
-             "If not set, only Socket.IO completion is checked.",
-    )
-
-    # Toggles
-    parser.add_argument(
-        "--debug", "-d",
-        action="store_true",
-        help="Enable verbose debug output",
-    )
-    parser.add_argument(
-        "--no-warmup",
-        action="store_true",
-        help="Skip Ollama model warm-up phase",
-    )
-    parser.add_argument(
-        "--no-cleanup",
-        action="store_true",
-        help="Skip deleting existing tasks before starting",
-    )
-    parser.add_argument(
-        "--no-tail-logs",
-        action="store_true",
-        help="Disable tailing Ollama and AiderDesk log files",
-    )
-    parser.add_argument(
-        "--warmup-timeout",
-        type=int, default=300,
-        help="Timeout for Ollama warm-up request in seconds (default: 300)",
-    )
-
-    return parser.parse_args()
-
+  OptionParser.new do |opts|
+    opts.banner = "Usage: #{File.basename($PROGRAM_NAME)} [options]"
+    opts.on('-p', '--prompt PROMPT', 'Prompt to send') { |v| args[:prompt] = v }
+    opts.on('-f', '--prompt-file PATH', 'Path to prompt file (overrides --prompt)') { |v| args[:prompt_file] = v }
+    opts.on('-m', '--model MODEL', 'Model identifier') { |v| args[:model] = v }
+    opts.on('-t', '--timeout SECONDS', Integer, 'Seconds per attempt (default: 120)') { |v| args[:timeout] = v }
+    opts.on('-r', '--retries COUNT', Integer, 'Max attempts (default: 3)') { |v| args[:retries] = v }
+    opts.on('--mode MODE', 'Aider mode: code, agent, ask, architect') { |v| args[:mode] = v }
+    opts.on('--edit-format FMT', 'Edit format: diff, whole, udiff, editor-diff, editor-whole') { |v| args[:edit_format] = v }
+    opts.on('--transport TYPE', 'Transport: socketio (default) or rest') { |v| args[:transport] = v }
+    opts.on('--base-url URL', 'AiderDesk base URL') { |v| args[:base_url] = v }
+    opts.on('--ollama-url URL', 'Ollama API URL') { |v| args[:ollama_url] = v }
+    opts.on('-u', '--username USER', 'AiderDesk username') { |v| args[:username] = v }
+    opts.on('--password PASS', 'AiderDesk password') { |v| args[:password] = v }
+    opts.on('--project-dir DIR', 'AiderDesk project directory') { |v| args[:project_dir] = v }
+    opts.on('--target-file PATH', 'Expected output file path') { |v| args[:target_file] = v }
+    opts.on('-d', '--debug', 'Enable verbose debug output') { args[:debug] = true }
+    opts.on('--no-warmup', 'Skip Ollama warm-up') { args[:no_warmup] = true }
+    opts.on('--no-cleanup', 'Skip deleting existing tasks') { args[:no_cleanup] = true }
+    opts.on('--no-tail-logs', 'Disable log tailing') { args[:no_tail_logs] = true }
+    opts.on('--warmup-timeout SEC', Integer, 'Warm-up timeout (default: 300)') { |v| args[:warmup_timeout] = v }
+    opts.on('-h', '--help', 'Show help') { puts opts; exit 0 }
+  end.parse!(argv)
+  args
+end
 
 # ── Main ─────────────────────────────────────────────────────────────────────
-# PORTABLE: The main() orchestration logic is language-agnostic.
-# Most of the flow (health check → warm-up → setup → attempt loop → results)
-# translates directly to Ruby. Replace Python-specific calls with Ruby equivalents
-# as noted in the component sections above.
 
-def main():
-    args = parse_args()
+def main
+  args = parse_args(ARGV)
+  $debug = args[:debug]
 
-    global DEBUG
-    DEBUG = args.debug
+  api_url     = "#{args[:base_url]}/api"
+  project_dir = args[:project_dir]
+  model       = args[:model]
+  prompt      = args[:prompt]
+  timeout     = args[:timeout]
+  max_attempts = args[:retries]
+  mode        = args[:mode]
+  target_file = args[:target_file]
+  transport   = args[:transport]
 
-    api_url = f"{args.base_url}/api"
-    auth = HTTPBasicAuth(args.username, args.password)
-    project_dir = args.project_dir
-    model = args.model
-    # ── Resolve prompt: --prompt-file overrides --prompt ───────────────────
-    if args.prompt_file:
-        prompt_file_path = args.prompt_file
-        if not os.path.isabs(prompt_file_path):
-            prompt_file_path = os.path.abspath(prompt_file_path)
-        if not os.path.exists(prompt_file_path):
-            log("FAIL", f"Prompt file not found: {prompt_file_path}")
-            sys.exit(1)
-        with open(prompt_file_path, "r") as pf:
-            prompt = pf.read().strip()
-        if not prompt:
-            log("FAIL", f"Prompt file is empty: {prompt_file_path}")
-            sys.exit(1)
-        log("INFO", f"Loaded prompt from file: {prompt_file_path} ({len(prompt)} chars)")
-    else:
-        prompt = args.prompt
-    timeout = args.timeout
-    max_attempts = args.retries
-    mode = args.mode
-    target_file = args.target_file
+  if args[:prompt_file]
+    path = File.expand_path(args[:prompt_file])
+    unless File.exist?(path)
+      log('FAIL', "Prompt file not found: #{path}")
+      exit 1
+    end
+    prompt = File.read(path).strip
+    if prompt.empty?
+      log('FAIL', "Prompt file is empty: #{path}")
+      exit 1
+    end
+    log('INFO', "Loaded prompt from file: #{path} (#{prompt.length} chars)")
+  end
 
-    # Per-phase timing metrics
-    phases = {}
+  phases = {}
 
-    print("=" * 70)
-    log("INFO", "AiderDesk + Ollama Prompt Runner")
-    log("INFO", f"Model:        {model}")
-    log("INFO", f"Timeout:      {timeout}s per attempt")
-    log("INFO", f"Max attempts: {max_attempts}")
-    log("INFO", f"Mode:         {mode}")
-    log("INFO", f"Edit format:  {args.edit_format or '(server default)'}")
-    log("INFO", f"Prompt:       {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
-    if target_file:
-        log("INFO", f"Target file:  {target_file}")
-    log("INFO", f"Debug:        {DEBUG}")
-    print("=" * 70)
+  puts '=' * 70
+  log('INFO', 'AiderDesk + Ollama Prompt Runner (Ruby)')
+  log('INFO', "Model:        #{model}")
+  log('INFO', "Timeout:      #{timeout}s per attempt")
+  log('INFO', "Max attempts: #{max_attempts}")
+  log('INFO', "Mode:         #{mode}")
+  log('INFO', "Transport:    #{transport}")
+  log('INFO', "Edit format:  #{args[:edit_format] || '(server default)'}")
+  log('INFO', "Prompt:       #{prompt[0, 80]}#{prompt.length > 80 ? '...' : ''}")
+  log('INFO', "Target file:  #{target_file}") if target_file
+  log('INFO', "Debug:        #{$debug}")
+  puts '=' * 70
 
-    # ── Phase: AiderDesk health check ────────────────────────────────────────
-    t0 = time.time()
-    if not health_check(api_url, auth):
-        log("FAIL", f"Cannot reach AiderDesk at {args.base_url}")
-        sys.exit(1)
-    log("PASS", "AiderDesk is reachable")
-    phases["aiderdesk_health"] = round(time.time() - t0, 2)
+  # ── AiderDesk health ───────────────────────────────────────────────────
+  t0 = Time.now
+  status, = api_get(api_url, '/settings', username: args[:username], password: args[:password], timeout: 5)
+  unless status == 200
+    log('FAIL', "Cannot reach AiderDesk at #{args[:base_url]}")
+    exit 1
+  end
+  log('PASS', 'AiderDesk is reachable')
+  phases[:aiderdesk_health] = (Time.now - t0).round(2)
 
-    # ── Phase: Ollama health check ───────────────────────────────────────────
-    t0 = time.time()
-    short_model = model.replace("ollama/", "")
-    if not check_ollama_health(short_model, args.ollama_url):
-        log("FAIL", "Ollama not available — exiting")
-        sys.exit(1)
-    check_ollama_running_models(args.ollama_url)
-    phases["ollama_health"] = round(time.time() - t0, 2)
+  # ── Ollama health ──────────────────────────────────────────────────────
+  t0 = Time.now
+  unless check_ollama_health(model, args[:ollama_url])
+    log('FAIL', 'Ollama not available — exiting')
+    exit 1
+  end
+  check_ollama_running_models(args[:ollama_url])
+  phases[:ollama_health] = (Time.now - t0).round(2)
 
-    # ── Phase: Ollama warm-up ────────────────────────────────────────────────
-    if not args.no_warmup:
-        t0 = time.time()
-        warm_up_ollama(short_model, timeout=args.warmup_timeout, ollama_url=args.ollama_url)
-        phases["warm_up"] = round(time.time() - t0, 2)
-    else:
-        log("INFO", "Skipping Ollama warm-up (--no-warmup)")
+  # ── Warm-up ────────────────────────────────────────────────────────────
+  unless args[:no_warmup]
+    t0 = Time.now
+    warm_up_ollama(model, timeout: args[:warmup_timeout], ollama_url: args[:ollama_url])
+    phases[:warm_up] = (Time.now - t0).round(2)
+  else
+    log('INFO', 'Skipping Ollama warm-up (--no-warmup)')
+  end
 
-    # ── Start log tailers ────────────────────────────────────────────────────
-    ollama_stop = threading.Event()
-    aiderdesk_stop = threading.Event()
-    if not args.no_tail_logs:
-        ollama_log = os.path.expanduser("~/.ollama/logs/server.log")
-        _today = datetime.now().strftime("%Y-%m-%d")
-        aiderdesk_log = os.path.expanduser(
-            f"~/Library/Application Support/aider-desk-dev/logs/combined-{_today}.log"
-        )
-        log("INFO", f"Tailing Ollama logs from: {ollama_log}")
-        log("INFO", f"Tailing AiderDesk logs from: {aiderdesk_log}")
-        ollama_stop = start_log_tailer(ollama_log, "OLLAMA")
-        aiderdesk_stop = start_log_tailer(aiderdesk_log, "AIDESK")
+  # ── Log tailers ────────────────────────────────────────────────────────
+  ollama_stop = { stop: false }
+  aiderdesk_stop = { stop: false }
+  unless args[:no_tail_logs]
+    ollama_log = File.expand_path('~/.ollama/logs/server.log')
+    aiderdesk_log = File.expand_path("~/Library/Application Support/aider-desk-dev/logs/combined-#{Time.now.strftime('%Y-%m-%d')}.log")
+    ollama_stop = start_log_tailer(ollama_log, 'OLLAMA')
+    aiderdesk_stop = start_log_tailer(aiderdesk_log, 'AIDESK')
+  end
 
-    # ── Set up project ───────────────────────────────────────────────────────
-    t0 = time.time()
-    api_post(api_url, auth, "/project/add-open", {"projectDir": project_dir})
-    api_post(api_url, auth, "/project/set-active", {"projectDir": project_dir})
-    log("INFO", f"Project set active: {project_dir}")
+  # ── Project setup ──────────────────────────────────────────────────────
+  t0 = Time.now
+  api_post(api_url, '/project/add-open', { projectDir: project_dir }, username: args[:username], password: args[:password])
+  api_post(api_url, '/project/set-active', { projectDir: project_dir }, username: args[:username], password: args[:password])
+  log('INFO', "Project set active: #{project_dir}")
 
-    # Optionally set edit format at the project level
-    if args.edit_format:
-        log("INFO", f"Setting edit format to '{args.edit_format}' for {model}")
-        api_post(api_url, auth, "/project/settings/edit-formats", {
-            "projectDir": project_dir,
-            "updatedFormats": {model: args.edit_format},
-        })
+  if args[:edit_format]
+    log('INFO', "Setting edit format to '#{args[:edit_format]}' for #{model}")
+    api_post(api_url, '/project/settings/edit-formats',
+             { projectDir: project_dir, updatedFormats: { model => args[:edit_format] } },
+             username: args[:username], password: args[:password])
+  end
 
-    # Set auto-approve at project level
-    api_post(api_url, auth, "/project/settings/update", {
-        "projectDir": project_dir,
-        "autoApprove": True,
-    })
+  api_post(api_url, '/project/settings/update',
+           { projectDir: project_dir, autoApprove: true },
+           username: args[:username], password: args[:password])
 
-    # ── Clean up existing tasks ──────────────────────────────────────────────
-    if not args.no_cleanup:
-        log("INFO", "Deleting all existing tasks before starting...")
-        try:
-            tasks_res = api_get(api_url, auth, f"/project/tasks?projectDir={project_dir}")
-            if tasks_res.status_code == 200:
-                tasks_list = tasks_res.json()
-                if isinstance(tasks_list, list) and len(tasks_list) > 0:
-                    log("INFO", f"  Found {len(tasks_list)} existing task(s) — deleting all")
-                    for t in tasks_list:
-                        tid = t.get("id", "")
-                        if tid:
-                            try:
-                                api_post(api_url, auth, "/project/tasks/delete", {
-                                    "projectDir": project_dir,
-                                    "id": tid,
-                                })
-                            except Exception as e:
-                                log("WARN", f"    Failed to delete {tid}: {e}")
-                    log("PASS", "All existing tasks deleted")
-                else:
-                    log("INFO", "  No existing tasks found — clean slate")
-        except Exception as e:
-            log("WARN", f"Could not delete existing tasks: {e}")
-        time.sleep(2)
-    phases["setup"] = round(time.time() - t0, 2)
+  unless args[:no_cleanup]
+    log('INFO', 'Deleting all existing tasks...')
+    s, b = api_get(api_url, "/project/tasks?projectDir=#{URI.encode_www_form_component(project_dir)}",
+                   username: args[:username], password: args[:password])
+    if s == 200
+      tasks = parse_json(b) || []
+      tasks.each do |t|
+        tid = t['id']
+        api_post(api_url, '/project/tasks/delete', { projectDir: project_dir, id: tid },
+                 username: args[:username], password: args[:password]) if tid
+      end
+      log('PASS', "Deleted #{tasks.length} task(s)") if tasks.any?
+    end
+    sleep 2
+  end
+  phases[:setup] = (Time.now - t0).round(2)
 
-    # ── Remove target file if it exists ──────────────────────────────────────
-    if target_file and os.path.exists(target_file):
-        log("INFO", f"Removing pre-existing {target_file}")
-        os.remove(target_file)
-        log("PASS", "File removed — clean slate")
+  # ── Remove target file ─────────────────────────────────────────────────
+  if target_file && File.exist?(target_file)
+    File.delete(target_file)
+    log('PASS', "Removed pre-existing #{target_file}")
+  end
 
-    # ── Connect Socket.IO event monitor ──────────────────────────────────────
-    monitor = EventMonitor(task_id="pending", base_url=args.base_url, project_dir=project_dir)
-    if not monitor.connect(args.username, args.password):
-        log("FAIL", "Could not connect Socket.IO — cannot monitor events")
-        sys.exit(1)
-    log("PASS", "Socket.IO event monitor connected")
+  # ── Connect monitor ────────────────────────────────────────────────────
+  monitor = if transport == 'socketio'
+              SocketIOMonitor.new(base_url: args[:base_url], project_dir: project_dir,
+                                  username: args[:username], password: args[:password])
+            else
+              RestMonitor.new(api_url: api_url, project_dir: project_dir,
+                              username: args[:username], password: args[:password])
+            end
 
-    # ── Attempt loop ─────────────────────────────────────────────────────────
-    task_id = None
-    completed = False
-    file_exists = False
-    total_start = time.time()
+  unless monitor.connect
+    log('FAIL', 'Could not connect event monitor')
+    exit 1
+  end
 
-    for attempt in range(1, max_attempts + 1):
-        print()
-        print("━" * 70)
-        log("INFO", f"  ATTEMPT {attempt} of {max_attempts}")
-        print("━" * 70)
+  # ── Attempt loop ───────────────────────────────────────────────────────
+  task_id = nil
+  completed = false
+  file_exists = false
+  total_start = Time.now
 
-        # Check Ollama status at start of each attempt
-        check_ollama_running_models(args.ollama_url)
+  (1..max_attempts).each do |attempt|
+    puts "\n" + ('━' * 70)
+    log('INFO', "  ATTEMPT #{attempt} of #{max_attempts}")
+    puts '━' * 70
 
-        # ── Create a fresh task ──────────────────────────────────────────
-        t0 = time.time()
-        task_name = f"Prompt #{attempt} - {datetime.now().strftime('%H:%M:%S')}"
-        res = api_post(api_url, auth, "/project/tasks/new", {
-            "projectDir": project_dir,
-            "name": task_name,
-            "activate": True,
-        })
-        if res.status_code != 200:
-            log("FAIL", f"Could not create task: {res.status_code} {res.text[:200]}")
-            continue
+    check_ollama_running_models(args[:ollama_url])
 
-        task_id = res.json().get("id")
-        log("PASS", f"Task created: {task_id}")
-        monitor.update_task_id(task_id)
+    t0 = Time.now
+    task_name = "Prompt ##{attempt} - #{Time.now.strftime('%H:%M:%S')}"
+    s, b = api_post(api_url, '/project/tasks/new',
+                    { projectDir: project_dir, name: task_name, activate: true },
+                    username: args[:username], password: args[:password])
+    if s != 200
+      log('FAIL', "Could not create task: #{s} #{b.to_s[0, 200]}")
+      next
+    end
 
-        # ── Configure model and task ─────────────────────────────────────
-        api_post(api_url, auth, "/project/settings/main-model", {
-            "projectDir": project_dir,
-            "taskId": task_id,
-            "mainModel": model,
-        })
-        api_post(api_url, auth, "/project/tasks", {
-            "projectDir": project_dir,
-            "id": task_id,
-            "updates": {"autoApprove": True, "currentMode": mode},
-        })
-        log("INFO", f"Model={model}, autoApprove=true, mode={mode}")
-        phases["task_creation"] = round(time.time() - t0, 2)
+    task_id = parse_json(b)&.fetch('id', nil)
+    log('PASS', "Task created: #{task_id}")
+    monitor.update_task_id(task_id)
 
-        # ── Pre-create empty target file if specified ────────────────────
-        if target_file:
-            if os.path.exists(target_file):
-                os.remove(target_file)
-            target_basename = os.path.basename(target_file)
-            log("INFO", f"Pre-creating empty {target_basename} for edit-format")
-            open(target_file, "w").close()
-            client_add = api_post(api_url, auth, "/add-context-file", {
-                "projectDir": project_dir,
-                "taskId": task_id,
-                "path": target_basename,
-                "readOnly": False,
-            })
-            if client_add.status_code == 200:
-                log("PASS", f"{target_basename} added to task context")
-            else:
-                log("WARN", f"Could not add file to context: {client_add.status_code}")
+    api_post(api_url, '/project/settings/main-model',
+             { projectDir: project_dir, taskId: task_id, mainModel: model },
+             username: args[:username], password: args[:password])
+    api_post(api_url, '/project/tasks',
+             { projectDir: project_dir, id: task_id, updates: { autoApprove: true, currentMode: mode } },
+             username: args[:username], password: args[:password])
+    log('INFO', "Model=#{model}, autoApprove=true, mode=#{mode}")
+    phases[:task_creation] = (Time.now - t0).round(2)
 
-        time.sleep(3)  # let backend stabilize
+    if target_file
+      File.delete(target_file) if File.exist?(target_file)
+      basename = File.basename(target_file)
+      log('INFO', "Pre-creating empty #{basename}")
+      File.write(target_file, '')
+      api_post(api_url, '/add-context-file',
+               { projectDir: project_dir, taskId: task_id, path: basename, readOnly: false },
+               username: args[:username], password: args[:password])
+    end
 
-        # ── Submit prompt ────────────────────────────────────────────────
-        log("INFO", f"Submitting prompt ({len(prompt)} chars)...")
-        prompt_result, prompt_thread = fire_prompt_async(
-            api_url, auth, project_dir, task_id, prompt, mode,
-        )
-        log("INFO", f"Waiting up to {timeout}s for completion...")
-        print("-" * 70)
+    sleep 3
 
-        attempt_start = time.time()
-        attempt_completed = False
-        file_on_disk = False
-        first_chunk_time = None
+    log('INFO', "Submitting prompt (#{prompt.length} chars)...")
+    prompt_result = fire_prompt_async(api_url, args[:username], args[:password], project_dir, task_id, prompt, mode)
+    log('INFO', "Waiting up to #{timeout}s for completion...")
+    puts '-' * 70
 
-        while True:
-            elapsed = time.time() - attempt_start
+    attempt_start = Time.now
+    attempt_completed = false
+    file_on_disk = false
+    first_chunk_time = nil
+    file_drop_logged = false
+    prompt_done_logged = false
 
-            # ── Track first chunk time ───────────────────────────────────
-            if monitor.chunks_received > 0 and first_chunk_time is None:
-                first_chunk_time = round(elapsed, 2)
-                phases["first_chunk"] = first_chunk_time
+    loop do
+      elapsed = Time.now - attempt_start
 
-            # ── Check for completion via Socket.IO ───────────────────────
-            if monitor.completed.is_set():
-                log("PASS", f"✅ response-completed received after {round(elapsed, 1)}s")
-                log("INFO", f"  Total chunks received: {monitor.chunks_received}")
-                phases["completion"] = round(elapsed, 2)
-                attempt_completed = True
-                break
+      # REST transport needs explicit polling
+      monitor.poll_once if monitor.is_a?(RestMonitor)
 
-            # ── Check for question via Socket.IO ─────────────────────────
-            if monitor.question_pending.is_set():
-                log("QUESTION", f"Task asking: {monitor.question_text}")
-                log("QUESTION", "Auto-answering: 'yes'")
-                try:
-                    api_post(api_url, auth, "/project/answer-question", {
-                        "projectDir": project_dir,
-                        "taskId": task_id,
-                        "answer": "yes",
-                    })
-                    monitor.question_pending.clear()
-                except Exception as e:
-                    log("WARN", f"Failed to answer question: {e}")
+      # Track first chunk
+      if monitor.chunks_received > 0 && first_chunk_time.nil?
+        first_chunk_time = elapsed.round(2)
+        phases[:first_chunk] = first_chunk_time
+      end
 
-            # ── Check if target file has content on disk ─────────────────
-            if target_file and not file_on_disk:
-                if os.path.exists(target_file) and os.path.getsize(target_file) > 0:
-                    log("INFO", f"📄 {os.path.basename(target_file)} has content on disk")
-                    file_on_disk = True
-                    file_exists = True
-                    phases["file_on_disk"] = round(elapsed, 2)
+      if monitor.completed?
+        log('PASS', "✅ task-completed received after #{elapsed.round(1)}s")
+        log('INFO', "  Total chunks received: #{monitor.chunks_received}")
+        log('INFO', "  Response-completed events: #{monitor.response_completed_count}")
+        phases[:completion] = elapsed.round(2)
+        attempt_completed = true
+        break
+      end
 
-            # ── Early success: file on disk + dropped from chat ──────────
-            if monitor.file_dropped and file_on_disk:
-                log("DETECT", "✅ File created on disk AND dropped from chat — early success")
-                log("DETECT", "  Interrupting to prevent redundant second pass...")
-                try:
-                    api_post(api_url, auth, "/project/interrupt", {
-                        "projectDir": project_dir,
-                        "taskId": task_id,
-                    })
-                except Exception:
-                    pass
-                attempt_completed = True
-                break
+      if monitor.question_pending?
+        log('QUESTION', "Task asking: #{monitor.question_text}")
+        log('QUESTION', "Auto-answering: 'yes'")
+        api_post(api_url, '/project/answer-question',
+                 { projectDir: project_dir, taskId: task_id, answer: 'yes' },
+                 username: args[:username], password: args[:password])
+        monitor.clear_question
+      end
 
-            # ── Stale chunk detection ────────────────────────────────────
-            if monitor.chunks_received > 0:
-                stale = time.time() - monitor.last_activity
-                if stale > STALE_CHUNK_TIMEOUT:
-                    log("WARN", f"No new chunks for {round(stale)}s — generation may have stalled")
+      if target_file && !file_on_disk && File.exist?(target_file) && File.size(target_file).positive?
+        log('INFO', "📄 #{File.basename(target_file)} has content on disk")
+        file_on_disk = true
+        file_exists = true
+        phases[:file_on_disk] = elapsed.round(2)
+      end
 
-            # ── Check if run-prompt thread finished ──────────────────────
-            if prompt_result["done"] and not monitor.completed.is_set():
-                if prompt_result["error"]:
-                    log("WARN", f"run-prompt thread error: {prompt_result['error']}")
-                else:
-                    log("INFO", f"run-prompt returned HTTP {prompt_result['status']}")
-                time.sleep(2)
-                if monitor.completed.is_set():
-                    attempt_completed = True
-                    break
-                if target_file and os.path.exists(target_file) and os.path.getsize(target_file) > 0:
-                    log("INFO", "run-prompt finished + file has content — treating as success")
-                    file_exists = True
-                    attempt_completed = True
-                    break
+      if monitor.file_dropped? && file_on_disk && !file_drop_logged
+        log('DETECT', 'File created + dropped from chat (waiting for task-completed)')
+        file_drop_logged = true
+      end
 
-            # ── Timeout → classify failure ───────────────────────────────
-            if elapsed > timeout:
-                reason = classify_failure(monitor, prompt_result, elapsed)
-                stale_duration = round(time.time() - monitor.last_activity, 1)
-                print()
-                log("TIMEOUT", f"⚠️  No completion within {timeout}s.")
-                log("TIMEOUT", f"  Failure reason:  {reason}")
-                log("TIMEOUT", f"  Chunks received: {monitor.chunks_received}")
-                log("TIMEOUT", f"  Stale for:       {stale_duration}s")
-                log("TIMEOUT", f"  run-prompt done={prompt_result['done']}, "
-                               f"status={prompt_result['status']}, error={prompt_result['error']}")
+      if monitor.chunks_received > 0
+        stale = Time.now - monitor.last_activity
+        log('WARN', "No new chunks for #{stale.round}s — may have stalled") if stale > STALE_CHUNK_TIMEOUT
+      end
 
-                # Check Ollama state when failure occurs
-                check_ollama_running_models(args.ollama_url)
+      if prompt_result[:done] && !monitor.completed? && !prompt_done_logged
+        log(prompt_result[:error] ? 'WARN' : 'INFO',
+            prompt_result[:error] ? "run-prompt error: #{prompt_result[:error]}" : "run-prompt returned HTTP #{prompt_result[:status]}")
+        log('INFO', "  Response-completed events so far: #{monitor.response_completed_count}")
+        log('INFO', '  Waiting for task-completed signal...')
+        prompt_done_logged = true
+      end
 
-                # Interrupt the stuck task
-                log("INFO", f"Interrupting task {task_id}...")
-                try:
-                    int_res = api_post(api_url, auth, "/project/interrupt", {
-                        "projectDir": project_dir,
-                        "taskId": task_id,
-                    })
-                    if int_res.status_code == 200:
-                        log("INFO", "Interrupt sent successfully")
-                    else:
-                        log("WARN", f"Interrupt returned {int_res.status_code}")
-                except Exception as e:
-                    log("WARN", f"Interrupt failed: {e}")
-                time.sleep(2)
-                break
+      if elapsed > timeout
+        snap = monitor.snapshot
+        reason = classify_failure(snap, prompt_result, elapsed)
+        puts ''
+        log('TIMEOUT', "⚠️  No completion within #{timeout}s.")
+        log('TIMEOUT', "  Failure reason:  #{reason}")
+        log('TIMEOUT', "  Chunks received: #{snap[:chunks_received]}")
+        log('TIMEOUT', "  Response-completed events: #{snap[:response_completed_count]}")
+        log('TIMEOUT', "  Stale for:       #{(Time.now - snap[:last_activity]).round(1)}s")
+        check_ollama_running_models(args[:ollama_url])
+        api_post(api_url, '/project/interrupt',
+                 { projectDir: project_dir, taskId: task_id },
+                 username: args[:username], password: args[:password])
+        sleep 2
+        break
+      end
 
-            time.sleep(1)
+      sleep 1
+    end
 
-        if attempt_completed or file_exists:
-            completed = True
-            break
+    if attempt_completed || file_exists
+      completed = true
+      break
+    end
 
-        # Breather between attempts
-        if attempt < max_attempts:
-            log("INFO", "Waiting 5s before next attempt...")
-            time.sleep(5)
+    log('INFO', 'Waiting 5s before next attempt...') if attempt < max_attempts
+    sleep 5 if attempt < max_attempts
+  end
 
-    # ── Final results ────────────────────────────────────────────────────────
-    total_elapsed = round(time.time() - total_start, 1)
-    if target_file and not file_exists:
-        file_exists = os.path.exists(target_file) and os.path.getsize(target_file) > 0
+  # ── Final results ──────────────────────────────────────────────────────
+  total_elapsed = (Time.now - total_start).round(1)
+  file_exists = File.exist?(target_file) && File.size(target_file).positive? if target_file && !file_exists
 
-    print()
-    print("=" * 70)
-    log("INFO", "  FINAL RESULTS")
-    print("=" * 70)
-    log("INFO", f"  Total elapsed:     {total_elapsed}s")
-    log("INFO", f"  Task ID:           {task_id}")
-    log("INFO", f"  Completed signal:  {completed}")
-    if target_file:
-        log("INFO", f"  File created:      {file_exists}")
-    log("INFO", f"  Chunks received:   {monitor.chunks_received}")
+  puts "\n" + ('=' * 70)
+  log('INFO', '  FINAL RESULTS')
+  puts '=' * 70
+  log('INFO', "  Total elapsed:     #{total_elapsed}s")
+  log('INFO', "  Task ID:           #{task_id}")
+  log('INFO', "  Completed signal:  #{completed}")
+  log('INFO', "  Transport:         #{transport}")
+  log('INFO', "  File created:      #{file_exists}") if target_file
+  log('INFO', "  Chunks received:   #{monitor.chunks_received}")
+  log('INFO', "  Response-completed: #{monitor.response_completed_count}")
 
-    # Print phase timing
-    if phases:
-        print()
-        log("INFO", "  Phase timing (seconds):")
-        for phase, duration in phases.items():
-            log("INFO", f"    {phase:20s} {duration:>8.2f}s")
+  if phases.any?
+    puts ''
+    log('INFO', '  Phase timing (seconds):')
+    phases.each { |p, d| log('INFO', format('    %-20s %8.2fs', p, d)) }
+  end
+  puts ''
 
-    print()
+  ollama_stop[:stop] = true
+  aiderdesk_stop[:stop] = true
+  monitor.disconnect
 
-    # Stop log tailers and Socket.IO
-    ollama_stop.set()
-    aiderdesk_stop.set()
-    monitor.disconnect()
+  if completed || file_exists
+    log('PASS', '✅ Prompt processed successfully.')
+    if target_file && file_exists
+      puts "\n--- #{File.basename(target_file)} (first 30 lines) ---"
+      begin
+        File.readlines(target_file).first(30).each { |l| puts "  #{l}" }
+      rescue StandardError => e
+        log('WARN', "Could not read file: #{e}")
+      end
+    end
+    exit 0
+  else
+    log('FAIL', "❌ All #{max_attempts} attempts failed.")
+    puts ''
+    log('INFO', '  Troubleshooting:')
+    log('INFO', '    1. Check Ollama: ollama ps')
+    log('INFO', '    2. Try --transport rest for REST fallback')
+    log('INFO', '    3. Try --no-warmup if warm-up hangs')
+    log('INFO', '    4. Try --edit-format whole')
+    exit 1
+  end
+end
 
-    if completed or file_exists:
-        log("PASS", "✅ Prompt processed successfully.")
-        if target_file and file_exists:
-            print()
-            basename = os.path.basename(target_file)
-            print(f"--- {basename} (first 30 lines) ---")
-            try:
-                with open(target_file) as f:
-                    for i, line in enumerate(f):
-                        if i >= 30:
-                            break
-                        print(f"  {line}", end="")
-            except Exception as e:
-                log("WARN", f"Could not read file: {e}")
-        sys.exit(0)
-    else:
-        log("FAIL", f"❌ All {max_attempts} attempts failed.")
-        print()
-        log("INFO", "  Troubleshooting:")
-        log("INFO", "    1. Check Ollama is running:  ollama ps")
-        log("INFO", "    2. Check model is loaded:    curl http://localhost:11434/api/tags")
-        log("INFO", "    3. Restart Ollama:           ollama stop && ollama serve")
-        log("INFO", "    4. Try with --no-warmup if warm-up itself is hanging")
-        log("INFO", "    5. Try --edit-format whole to avoid SEARCH/REPLACE issues")
-        log("INFO", "    6. Try --mode agent for better multi-step handling")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+main if __FILE__ == $PROGRAM_NAME

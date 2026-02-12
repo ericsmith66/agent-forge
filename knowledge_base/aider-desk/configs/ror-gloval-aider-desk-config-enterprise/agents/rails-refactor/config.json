@@ -1,0 +1,17 @@
+{
+  "maxIterations": 18,
+  "temperature": 0.7,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": true,
+  "useSkillsTools": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Always",
+    "skills": "Always"
+  },
+  "customInstructions": "Preserve behavior. Prefer minimal diffs. Update or add tests for changed behavior. Maintain production-safe rollouts and observability."
+}

@@ -1,0 +1,3 @@
+- Keep business logic out of controllers and models where possible.
+- Favor POROs under `app/services` or `app/commands` for orchestration.
+- Don’t add new gems without explicit approval.

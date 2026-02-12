@@ -1,0 +1,4 @@
+- Keep changes minimal and scoped to the defect.
+- Add explicit error handling and logging for the failing path.
+- Prefer test-first reproduction and a focused regression test.
+- Avoid broad refactors while debugging.

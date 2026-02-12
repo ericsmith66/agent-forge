@@ -1,0 +1,4 @@
+- Keep business logic out of views; use presenters/helpers for formatting.
+- Use Turbo Frames/Streams for interactivity instead of custom JS where possible.
+- Enforce responsive layouts with Tailwind breakpoints and design tokens.
+- Avoid introducing new frontend frameworks unless requested.

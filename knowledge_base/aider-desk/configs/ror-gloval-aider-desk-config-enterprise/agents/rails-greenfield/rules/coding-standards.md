@@ -1,0 +1,6 @@
+- Prefer `rubocop`-friendly formatting and team linting rules.
+- Keep controllers thin; move domain logic into services or POROs.
+- Use `Time.zone` and `ActiveSupport::TimeZone` for time handling.
+- Avoid monkey patches; prefer extension modules or wrappers.
+- Prefer keyword arguments for clarity on service inputs.
+- Use `ApplicationService` or `BaseService` pattern if the project defines one.

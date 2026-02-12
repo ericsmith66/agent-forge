@@ -41,15 +41,22 @@ You are the **execution and observation agent** for this evaluation. You will:
    Run **each configuration separately** in its own worktree/branch:
 
    Configurations to test:
-    - Config 1: **Focused code mode** + **Claude 3.5 Sonnet** (primary)
-    - Config 2: **Agent/autonomous mode** + **Claude 3.5 Sonnet**
-    - Config 3: **Focused mode** + strongest Ollama model (qwen2.5-coder or deepseek-coder preferred)
-    - Config 4: (optional) Focused mode + Grok (if OpenAI-compatible proxy is set up)
+    - Config 1: **Focused code mode** + **Claude 3.5 Sonnet** (✅ SUCCESS)
+    - Config 2: **Agent mode** + **Claude 3.5 Sonnet** (❌ STALLED)
+    - Config 3: **Focused code mode** + **qwen2.5-70b** (✅ SUCCESS)
+    - Config 4: **Architect/Agent mode** + **qwen3-next (80B)** (❌ CRASHED)
+    - **Config 5: Code Mode + qwen3:32b**
+    - **Config 6: Agent Mode + qwen3:32b**
+    - **Config 7: Code Mode + qwen3:30b-a3b**
+    - **Config 8: Agent Mode + qwen3:30b-a3b**
+    - **Config 9: Code Mode + qwen3-coder-next:latest**
+    - **Config 10: Agent Mode + qwen3-coder-next:latest**
 
    For each run:
-    - Start AiderDesk in the correct mode/model
-    - Paste the **entire spike task prompt** (the full PrefabClient task description) as the first message
-    - Let AiderDesk work until it says it’s done or explicitly asks for clarification
+    - Start AiderDesk in the correct mode/model.
+    - **Note**: For local Ollama runs, prefer using `python3 knowledge_base/aider-desk/docs/ollama_prompt.py` for more robust error detection and warm-ups.
+    - Example: `python3 knowledge_base/aider-desk/docs/ollama_prompt.py --model ollama/qwen3:32b --mode code --prompt-file knowledge_base/epics/epic-3-spike-aider-desk/prefab_client_greenfield.txt`
+    - Let AiderDesk work until it says it’s done or explicitly asks for clarification.
     - **Do NOT proactively give hints** — only respond if it gets truly stuck (and log every time you intervene)
     - After it finishes:
         - Run `bundle install` if needed

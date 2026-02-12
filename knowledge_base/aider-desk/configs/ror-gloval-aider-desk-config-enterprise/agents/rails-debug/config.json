@@ -1,0 +1,17 @@
+{
+  "maxIterations": 12,
+  "temperature": 0.4,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": false,
+  "useSkillsTools": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Never",
+    "skills": "Always"
+  },
+  "customInstructions": "Reproduce first, then fix. Provide evidence from logs/tests. Add guardrails to prevent regressions."
+}

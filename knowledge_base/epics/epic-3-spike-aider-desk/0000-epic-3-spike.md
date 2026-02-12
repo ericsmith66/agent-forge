@@ -184,10 +184,11 @@ Spike Epic is complete when:
 
 ## 🎯 Current State
 
-### ✅ SPIKE EPIC READY – ALL PRDs DEFINED
-- ✅ Project references from Epic 1 incorporated
-- ✅ Task scoped to PRD 1.2 style for realism
-- ✅ Configurations defined
+### ✅ SPIKE EPIC IN PROGRESS – UPDATED 2026-02-11
+- ✅ Config 1 (Claude Focused): Success (19/19)
+- ✅ Config 3 (Qwen 2.5-70B Focused): Success (14/14)
+- ❌ Config 4 (Qwen 3 Next 80B Architect/Agent): Failed (Stability)
+- 🔄 **NEW TARGETS**: qwen3:32b, qwen3:30b-a3b, qwen3-coder-next:latest (Configs 5-10)
 
 ### Test Summary (Expected for Generated Code)
 - 20+ specs, 0 failures
@@ -351,10 +352,17 @@ Run AiderDesk in each configuration to implement the PrefabClient task, logging 
 ## Requirements
 
 ### Configurations
-1. Focused + Claude 3.5 Sonnet
-2. Agent + Claude 3.5 Sonnet
-3. Focused + Ollama (qwen2.5-coder)
-4. (Optional) Focused + Grok
+1. Focused + Claude 3.5 Sonnet (✅ SUCCESS - 19/19)
+2. Agent + Claude 3.5 Sonnet (❌ STALLED)
+3. Focused + qwen2.5-70b (✅ SUCCESS - 14/14)
+4. Architect/Agent + qwen3-next (80B) (❌ CRASHED)
+5. Code Mode + qwen3:32b
+6. Agent Mode + qwen3:32b
+7. Code Mode + qwen3:30b-a3b
+8. Agent Mode + qwen3:30b-a3b
+9. Code Mode + qwen3-coder-next:latest
+10. Agent Mode + qwen3-coder-next:latest
+11. (Optional) Focused + Grok
 
 ### Execution Flow
 - Enter worktree

@@ -27,11 +27,15 @@ The spike successfully baselined AiderDesk's capabilities using a realistic Rail
 - **Monitoring Gap:** The API polling method failed to capture intermediate tool calls/questions, leading to "silent" stalls from the orchestrator's perspective.
 - **Verdict:** Currently too unstable/chatty for simple implementation tasks. Requires better RAG/Context injection to reduce planning loops.
 
-### Config 3: Focused Mode + Ollama (qwen2.5-coder:32b / llama3.1:8b)
-- **Status:** ❌ FAILED (Infrastructure/API Issues)
-- **Observation:** Persistent 504 timeouts from the AiderDesk API when triggering prompts.
-- **Friction:** Ollama heartbeat was healthy (4s response), but the AiderDesk-to-Python connector failed to pick up the prompt for newly created projects.
-- **Verdict:** Unsuitable for automated workflows until the API/Connector layer is more robust.
+### Config 3: Focused Mode + Ollama (qwen2.5-70b)
+- **Status:** ✅ SUCCESS (Interpreted from log)
+- **Observation:** Very strong performance locally. Matches Claude in logic, though test coverage was slightly lower (14 vs 19 specs).
+- **Verdict:** Best-in-class local model for direct implementation.
+
+### Config 4: Architect & Agent Mode + Qwen 3 Next 80B
+- **Status:** ❌ FAILED (Stability/Latency)
+- **Observation:** The "Thinking" process exceeded standard API timeouts and eventually crashed the Ollama server. In Agent mode, it exhibited tool-schema validation errors.
+- **Verdict:** Currently too heavy/unstable for autonomous tool-calling loops without significant timeout refactoring.
 
 ---
 

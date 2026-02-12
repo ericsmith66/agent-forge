@@ -1,0 +1,4 @@
+- Prefer Tailwind utility classes over custom CSS.
+- Keep class lists readable; extract repeated UI into partials or components.
+- Keep templates logic-light; move formatting to helpers.
+- Use Rails form helpers and consistent error styling.

@@ -1,0 +1,17 @@
+{
+  "maxIterations": 10,
+  "temperature": 0.6,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": false,
+  "useSkillsTools": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Never",
+    "skills": "Always"
+  },
+  "customInstructions": "Focus on UI/UX changes in Rails views and components. Use Tailwind + DaisyUI utilities and Turbo for interactivity. Prefer minimal JavaScript and avoid new frontend frameworks unless requested."
+}

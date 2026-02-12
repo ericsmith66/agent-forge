@@ -1,0 +1,5 @@
+- Preserve existing style and formatting; avoid churn.
+- Keep public APIs stable unless explicitly requested.
+- Prefer small, reversible changes with clear commit boundaries.
+- Do not introduce new dependencies without justification.
+- Keep migrations backward-compatible and safe for large tables.

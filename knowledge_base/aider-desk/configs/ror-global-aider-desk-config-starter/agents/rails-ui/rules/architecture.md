@@ -1,0 +1,4 @@
+- Keep business logic out of views; use presenters/helpers for formatting.
+- Use Turbo Frames/Streams for interactivity instead of custom JS where possible.
+- Avoid introducing new frontend frameworks unless requested.
+- Keep styles in Tailwind config; avoid inline styles.
