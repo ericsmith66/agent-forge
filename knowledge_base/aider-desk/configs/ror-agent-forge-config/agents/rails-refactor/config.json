@@ -13,5 +13,20 @@
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested."
+  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested.",
+  "id": "9c15ccce-2ca3-4ab2-aae2-cbf705893afa",
+  "name": "rails-refactor",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-5-20250929",
+  "minTimeBetweenToolCalls": 0,
+  "enabledServers": [],
+  "toolSettings": {},
+  "subagent": {
+    "enabled": false,
+    "systemPrompt": "",
+    "invocationMode": "on-demand",
+    "color": "#3368a8",
+    "description": "",
+    "contextMemory": "off"
+  }
 }

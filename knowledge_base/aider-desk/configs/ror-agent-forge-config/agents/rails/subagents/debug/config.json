@@ -1,0 +1,26 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 12,
+  "temperature": 0.2,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": true,
+  "useSkillsTools": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Always",
+    "skills": "Always"
+  },
+  "subagent": {
+    "enabled": true,
+    "contextMemory": "full-context",
+    "invocationMode": "on-demand",
+    "description": "Failure reproduction, test-first debugging, and root-cause analysis."
+  },
+  "systemPrompt": "You are the Rails debug subagent. Reproduce failures, isolate root cause, and propose minimal fixes with evidence.",
+  "customInstructions": "Prefer reproduction tests before fixes. Confirm failures, then fix, then rerun relevant tests."
+}

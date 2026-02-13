@@ -13,5 +13,20 @@
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested."
+  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested.",
+  "id": "6aa29352-6216-4a48-b105-f80475fdce18",
+  "name": "rails-greenfield",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-5-20250929",
+  "minTimeBetweenToolCalls": 0,
+  "enabledServers": [],
+  "toolSettings": {},
+  "subagent": {
+    "enabled": false,
+    "systemPrompt": "",
+    "invocationMode": "on-demand",
+    "color": "#3368a8",
+    "description": "",
+    "contextMemory": "off"
+  }
 }

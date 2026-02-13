@@ -1,0 +1,34 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 10,
+  "temperature": 0.7,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": false,
+  "useSkillsTools": true,
+  "useSubagents": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Never",
+    "skills": "Always",
+    "subagents---run_task": "Ask"
+  },
+  "customInstructions": "Primary Rails lead agent for Epic 5. Follow the strict directive. Delegate to the `debug` subagent IMMEDIATELY if any test suite failure persists for more than 2 iterations. Delegate to `ui` for all ViewComponent and Tailwind styling tasks.",
+  "id": "6bc14036-9886-42a5-8bce-2a253308c890",
+  "name": "rails",
+  "minTimeBetweenToolCalls": 0,
+  "enabledServers": [],
+  "toolSettings": {},
+  "subagent": {
+    "enabled": false,
+    "systemPrompt": "",
+    "invocationMode": "on-demand",
+    "color": "#3368a8",
+    "description": "",
+    "contextMemory": "off"
+  }
+}

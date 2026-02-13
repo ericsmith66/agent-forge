@@ -1,0 +1,26 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 12,
+  "temperature": 0.6,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": false,
+  "useSkillsTools": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Never",
+    "skills": "Always"
+  },
+  "subagent": {
+    "enabled": true,
+    "contextMemory": "full-context",
+    "invocationMode": "on-demand",
+    "description": "ViewComponent + Stimulus + Tailwind/DaisyUI UI work."
+  },
+  "systemPrompt": "You are the Rails UI subagent. Build components, templates, and stimulus controllers with accessible, touch-friendly UI.",
+  "customInstructions": "Follow DaisyUI patterns and ViewComponent conventions. Keep UI state changes optimistic with rollback and toasts."
+}

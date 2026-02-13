@@ -1,0 +1,124 @@
+#!/usr/bin/env ruby
+require 'fileutils'
+require 'pathname'
+
+# bin/setup-aider-desk
+# Automates the selective symlinking strategy for AiderDesk configurations.
+
+class AiderDeskSetup
+  ROOT_DIR = Pathname.new(File.expand_path('..', __dir__))
+  SHARED_CONFIG_DIR = ROOT_DIR.join('knowledge_base/aider-desk/configs/ror-agent-forge-config')
+  TASKS_MONITOR_DIR = ROOT_DIR.join('tasks/projects')
+
+  SUB_DIRS = %w[agents skills hooks commands].freeze
+
+  def initialize(project_path = nil)
+    @project_path = project_path ? Pathname.new(File.expand_path(project_path)) : ROOT_DIR
+    @project_name = @project_path == ROOT_DIR ? 'agent-forge' : @project_path.basename.to_s
+    @aider_dir = @project_path.join('.aider-desk')
+  end
+
+  def setup
+    puts "--- Setting up AiderDesk for #{@project_name} ---"
+    
+    ensure_shared_config_exists
+    ensure_tasks_monitor_exists
+    
+    create_physical_aider_dir
+    setup_selective_symlinks
+    setup_tasks_symlink
+    
+    puts "--- Setup complete for #{@project_name} ---\n\n"
+  end
+
+  private
+
+  def ensure_shared_config_exists
+    unless SHARED_CONFIG_DIR.directory?
+      puts "ERROR: Shared config directory not found at #{SHARED_CONFIG_DIR}"
+      exit 1
+    end
+  end
+
+  def ensure_tasks_monitor_exists
+    FileUtils.mkdir_p(TASKS_MONITOR_DIR) unless TASKS_MONITOR_DIR.directory?
+  end
+
+  def create_physical_aider_dir
+    if @aider_dir.symlink?
+      puts "Removing broad symlink at #{@aider_dir}..."
+      FileUtils.rm(@aider_dir)
+    end
+
+    unless @aider_dir.directory?
+      puts "Creating physical .aider-desk directory at #{@aider_dir}..."
+      FileUtils.mkdir_p(@aider_dir)
+    end
+  end
+
+  def setup_selective_symlinks
+    SUB_DIRS.each do |sub_dir|
+      target = @aider_dir.join(sub_dir)
+      source = SHARED_CONFIG_DIR.join(sub_dir)
+
+      # Calculate relative path from .aider-desk/ to the shared library
+      # We use Pathname#relative_path_from to get a clean relative path
+      relative_source = source.relative_path_from(@aider_dir)
+
+      if target.exist? || target.symlink?
+        if target.symlink? && target.readlink == relative_source
+          puts "  #{sub_dir} is already correctly symlinked."
+          next
+        else
+          puts "  Backing up existing #{sub_dir} to #{sub_dir}.bak..."
+          backup_path = @aider_dir.join("#{sub_dir}.#{Time.now.to_i}.bak")
+          FileUtils.mv(target, backup_path)
+        end
+      end
+
+      puts "  Linking #{sub_dir} -> #{relative_source}..."
+      FileUtils.ln_s(relative_source, target)
+    end
+  end
+
+  def setup_tasks_symlink
+    target = @aider_dir.join('tasks')
+    monitor_path = TASKS_MONITOR_DIR.join(@project_name)
+    
+    FileUtils.mkdir_p(monitor_path) unless monitor_path.directory?
+    
+    relative_monitor = monitor_path.relative_path_from(@aider_dir)
+
+    if target.exist? || target.symlink?
+      if target.symlink? && target.readlink == relative_monitor
+        puts "  tasks is already correctly symlinked to monitor."
+        return
+      else
+        puts "  Backing up existing tasks to tasks.bak..."
+        backup_path = @aider_dir.join("tasks.#{Time.now.to_i}.bak")
+        FileUtils.mv(target, backup_path)
+      end
+    end
+
+    puts "  Linking tasks -> #{relative_monitor}..."
+    FileUtils.ln_s(relative_monitor, target)
+  end
+end
+
+# Main execution
+if __FILE__ == $0
+  # Setup root project
+  AiderDeskSetup.new.setup
+
+  # Setup eureka-homekit if it exists
+  eureka_path = File.join('projects', 'eureka-homekit')
+  if Dir.exist?(eureka_path)
+    AiderDeskSetup.new(eureka_path).setup
+  end
+  
+  # Setup eureka-homekit-rebuild if it exists
+  eureka_rebuild_path = File.join('projects', 'eureka-homekit-rebuild')
+  if Dir.exist?(eureka_rebuild_path)
+    AiderDeskSetup.new(eureka_rebuild_path).setup
+  end
+end
