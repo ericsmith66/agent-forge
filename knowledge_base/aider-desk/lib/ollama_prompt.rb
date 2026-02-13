@@ -234,6 +234,7 @@ class SocketIOMonitor
     @question_text = nil
     @file_dropped = false
     @chunks_received = 0
+    @response_completed_count = 0
     @last_activity = Time.now
     @mx = Mutex.new
   end
@@ -260,7 +261,8 @@ class SocketIOMonitor
     sub = JSON.generate(['message', {
       'action' => 'subscribe-events',
       'eventTypes' => %w[response-chunk response-completed ask-question question-answered
-                         user-message log tool context-files-updated task-completed task-cancelled],
+                         user-message log tool context-files-updated task-completed task-cancelled
+                         task-updated],
       'baseDirs' => [@project_dir]
     }])
     eio_post("42#{sub}")
@@ -292,22 +294,25 @@ class SocketIOMonitor
       @question_text = nil
       @file_dropped = false
       @chunks_received = 0
+      @response_completed_count = 0
       @last_activity = Time.now
     end
   end
 
-  def completed?()        @mx.synchronize { @completed } end
-  def question_pending?()  @mx.synchronize { @question_pending } end
-  def question_text()     @mx.synchronize { @question_text } end
-  def file_dropped?()     @mx.synchronize { @file_dropped } end
-  def chunks_received()   @mx.synchronize { @chunks_received } end
-  def last_activity()     @mx.synchronize { @last_activity } end
-  def clear_question()    @mx.synchronize { @question_pending = false } end
+  def completed?()                @mx.synchronize { @completed } end
+  def question_pending?()          @mx.synchronize { @question_pending } end
+  def question_text()             @mx.synchronize { @question_text } end
+  def file_dropped?()             @mx.synchronize { @file_dropped } end
+  def chunks_received()           @mx.synchronize { @chunks_received } end
+  def response_completed_count()  @mx.synchronize { @response_completed_count } end
+  def last_activity()             @mx.synchronize { @last_activity } end
+  def clear_question()            @mx.synchronize { @question_pending = false } end
 
   def snapshot
     @mx.synchronize do
       { completed: @completed, question_pending: @question_pending, question_text: @question_text,
-        file_dropped: @file_dropped, chunks_received: @chunks_received, last_activity: @last_activity }
+        file_dropped: @file_dropped, chunks_received: @chunks_received,
+        response_completed_count: @response_completed_count, last_activity: @last_activity }
     end
   end
 
@@ -392,7 +397,8 @@ class SocketIOMonitor
     return unless payload.is_a?(Hash)
     et = payload['type'] || 'unknown'
     d  = payload['data'] || {}
-    tid = d['taskId'] || ''
+    # Most events use 'taskId', but task-updated/task-completed use 'id' (TaskData shape)
+    tid = d['taskId'] || d['id'] || ''
 
     @mx.synchronize do
       return if !tid.empty? && tid != @task_id
@@ -407,9 +413,12 @@ class SocketIOMonitor
         end
         @file_dropped = true if c.downcase.include?('dropping')
       when 'response-completed'
+        @response_completed_count += 1
         c = (d['content'] || '').to_s
-        log('SIO', "  ✅ [response-completed] #{c[0, 150]}")
-        @completed = true
+        log('SIO', "  [response-completed ##{@response_completed_count}] #{c[0, 150]}")
+        # NOTE: Do NOT set @completed here. In agent mode, response-completed
+        # fires after each agent step, not when the full task is done.
+        # Only task-completed / task-cancelled signals true completion.
       when 'ask-question'
         @question_text = (d['question'] || d['content'] || d.to_s).to_s[0, 200]
         @question_pending = true
@@ -428,6 +437,19 @@ class SocketIOMonitor
       when 'task-completed', 'task-cancelled'
         log('SIO', "  [#{et}]")
         @completed = true
+      when 'task-updated'
+        # AiderDesk never emits task-completed; instead it saves the task
+        # with state=READY_FOR_REVIEW/DONE and completedAt when finished.
+        # Detect completion via state change in task-updated events.
+        state = d['state'].to_s
+        completed_at = d['completedAt'].to_s
+        terminal = %w[READY_FOR_REVIEW DONE INTERRUPTED]
+        if terminal.include?(state) || !completed_at.empty?
+          log('SIO', "  [task-updated] state=#{state} completedAt=#{completed_at} \u2192 task finished")
+          @completed = true
+        else
+          log('DEBUG', "  [task-updated] state=#{state} (not terminal)")
+        end
       when 'context-files-updated'
         log('SIO', "  [context-files-updated] #{(d['files'] || []).length} file(s)")
       else
@@ -451,6 +473,7 @@ class RestMonitor
     @question_text = nil
     @file_dropped = false
     @chunks_received = 0
+    @response_completed_count = 0
     @last_activity = Time.now
     @seen_ids = {}
   end
@@ -469,21 +492,24 @@ class RestMonitor
     @question_text = nil
     @file_dropped = false
     @chunks_received = 0
+    @response_completed_count = 0
     @last_activity = Time.now
     @seen_ids = {}
   end
 
-  def completed?()        @completed end
-  def question_pending?()  @question_pending end
-  def question_text()     @question_text end
-  def file_dropped?()     @file_dropped end
-  def chunks_received()   @chunks_received end
-  def last_activity()     @last_activity end
-  def clear_question()    @question_pending = false end
+  def completed?()                @completed end
+  def question_pending?()          @question_pending end
+  def question_text()             @question_text end
+  def file_dropped?()             @file_dropped end
+  def chunks_received()           @chunks_received end
+  def response_completed_count()  @response_completed_count end
+  def last_activity()             @last_activity end
+  def clear_question()            @question_pending = false end
 
   def snapshot
     { completed: @completed, question_pending: @question_pending, question_text: @question_text,
-      file_dropped: @file_dropped, chunks_received: @chunks_received, last_activity: @last_activity }
+      file_dropped: @file_dropped, chunks_received: @chunks_received,
+      response_completed_count: @response_completed_count, last_activity: @last_activity }
   end
 
   # Called once per loop iteration from the main thread
@@ -509,8 +535,10 @@ class RestMonitor
         end
         @file_dropped = true if c.downcase.include?('dropping')
       when 'response-completed'
-        log('REST', "  ✅ [response-completed] #{msg['content'].to_s[0, 150]}")
-        @completed = true
+        @response_completed_count += 1
+        log('REST', "  [response-completed ##{@response_completed_count}] #{msg['content'].to_s[0, 150]}")
+        # NOTE: Do NOT set @completed here. In agent mode, response-completed
+        # fires after each agent step, not when the full task is done.
       when 'ask-question'
         @question_text = (msg['question'] || msg['content'] || msg.to_s).to_s[0, 200]
         @question_pending = true
@@ -759,6 +787,8 @@ def main
     attempt_completed = false
     file_on_disk = false
     first_chunk_time = nil
+    file_drop_logged = false
+    prompt_done_logged = false
 
     loop do
       elapsed = Time.now - attempt_start
@@ -773,8 +803,9 @@ def main
       end
 
       if monitor.completed?
-        log('PASS', "✅ response-completed received after #{elapsed.round(1)}s")
+        log('PASS', "✅ task-completed received after #{elapsed.round(1)}s")
         log('INFO', "  Total chunks received: #{monitor.chunks_received}")
+        log('INFO', "  Response-completed events: #{monitor.response_completed_count}")
         phases[:completion] = elapsed.round(2)
         attempt_completed = true
         break
@@ -796,13 +827,9 @@ def main
         phases[:file_on_disk] = elapsed.round(2)
       end
 
-      if monitor.file_dropped? && file_on_disk
-        log('DETECT', '✅ File created + dropped from chat — early success')
-        api_post(api_url, '/project/interrupt',
-                 { projectDir: project_dir, taskId: task_id },
-                 username: args[:username], password: args[:password])
-        attempt_completed = true
-        break
+      if monitor.file_dropped? && file_on_disk && !file_drop_logged
+        log('DETECT', 'File created + dropped from chat (waiting for task-completed)')
+        file_drop_logged = true
       end
 
       if monitor.chunks_received > 0
@@ -810,20 +837,12 @@ def main
         log('WARN', "No new chunks for #{stale.round}s — may have stalled") if stale > STALE_CHUNK_TIMEOUT
       end
 
-      if prompt_result[:done] && !monitor.completed?
+      if prompt_result[:done] && !monitor.completed? && !prompt_done_logged
         log(prompt_result[:error] ? 'WARN' : 'INFO',
             prompt_result[:error] ? "run-prompt error: #{prompt_result[:error]}" : "run-prompt returned HTTP #{prompt_result[:status]}")
-        sleep 2
-        if monitor.completed?
-          attempt_completed = true
-          break
-        end
-        if target_file && File.exist?(target_file) && File.size(target_file).positive?
-          log('INFO', 'run-prompt finished + file has content — treating as success')
-          file_exists = true
-          attempt_completed = true
-          break
-        end
+        log('INFO', "  Response-completed events so far: #{monitor.response_completed_count}")
+        log('INFO', '  Waiting for task-completed signal...')
+        prompt_done_logged = true
       end
 
       if elapsed > timeout
@@ -833,6 +852,7 @@ def main
         log('TIMEOUT', "⚠️  No completion within #{timeout}s.")
         log('TIMEOUT', "  Failure reason:  #{reason}")
         log('TIMEOUT', "  Chunks received: #{snap[:chunks_received]}")
+        log('TIMEOUT', "  Response-completed events: #{snap[:response_completed_count]}")
         log('TIMEOUT', "  Stale for:       #{(Time.now - snap[:last_activity]).round(1)}s")
         check_ollama_running_models(args[:ollama_url])
         api_post(api_url, '/project/interrupt',
@@ -867,6 +887,7 @@ def main
   log('INFO', "  Transport:         #{transport}")
   log('INFO', "  File created:      #{file_exists}") if target_file
   log('INFO', "  Chunks received:   #{monitor.chunks_received}")
+  log('INFO', "  Response-completed: #{monitor.response_completed_count}")
 
   if phases.any?
     puts ''
