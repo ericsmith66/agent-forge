@@ -1,5 +1,7 @@
 {
-  "maxIterations": 10,
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 8,
   "temperature": 0.8,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -13,5 +15,5 @@
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested. Align with enterprise security and observability defaults."
+  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested."
 }

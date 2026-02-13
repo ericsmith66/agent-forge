@@ -1,4 +1,6 @@
 {
+  "provider": "ollama",
+  "model": "qwen3-coder-next:latest",
   "maxIterations": 10,
   "temperature": 0.6,
   "includeContextFiles": true,

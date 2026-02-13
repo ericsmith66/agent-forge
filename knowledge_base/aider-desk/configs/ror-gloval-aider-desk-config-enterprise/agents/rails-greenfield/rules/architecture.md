@@ -1,6 +1,3 @@
-- Follow a layered flow: controllers → services → models/queries.
-- Isolate external integrations in `app/clients` or `app/services` with clear boundaries.
-- Keep write operations inside explicit transactions when multiple records are touched.
-- Prefer feature flags for risky or phased rollouts.
-- Add background jobs for long-running or retryable work.
-- Add observability hooks (logging/metrics) for new critical paths.
+- Keep business logic out of controllers and models where possible.
+- Favor POROs under `app/services` or `app/commands` for orchestration.
+- Don’t add new gems without explicit approval.

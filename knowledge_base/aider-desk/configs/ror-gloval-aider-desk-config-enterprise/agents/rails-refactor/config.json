@@ -1,5 +1,7 @@
 {
-  "maxIterations": 18,
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 16,
   "temperature": 0.7,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -13,5 +15,5 @@
     "todo": "Always",
     "skills": "Always"
   },
-  "customInstructions": "Preserve behavior. Prefer minimal diffs. Update or add tests for changed behavior. Maintain production-safe rollouts and observability."
+  "customInstructions": "Preserve behavior. Prefer minimal diffs. Update or add tests for changed behavior."
 }

@@ -1,5 +1,7 @@
 {
-  "maxIterations": 12,
+  "provider": "anthropic",
+  "model": "claude-opus",
+  "maxIterations": 10,
   "temperature": 0.4,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -13,5 +15,5 @@
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Reproduce first, then fix. Provide evidence from logs/tests. Add guardrails to prevent regressions."
+  "customInstructions": "Reproduce first, then fix. Provide evidence from logs or tests."
 }

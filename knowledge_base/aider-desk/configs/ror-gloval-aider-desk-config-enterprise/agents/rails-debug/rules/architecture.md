@@ -1,4 +1,3 @@
-- Trace the full request/job flow before changing behavior.
-- Keep fixes local; avoid architectural rewrites.
-- Add instrumentation only where it helps confirm the fix.
-- Verify data integrity assumptions and edge cases.
+- Keep business logic out of controllers and models where possible.
+- Favor POROs under `app/services` or `app/commands` for orchestration.
+- Don’t add new gems without explicit approval.

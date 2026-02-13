@@ -1,5 +1,4 @@
-- Preserve existing style and formatting; avoid churn.
-- Keep public APIs stable unless explicitly requested.
-- Prefer small, reversible changes with clear commit boundaries.
-- Do not introduce new dependencies without justification.
-- Keep migrations backward-compatible and safe for large tables.
+- Prefer `rubocop`-friendly formatting.
+- Use `frozen_string_literal: true` only when already present in the file.
+- Keep methods short; extract service objects for complex flows.
+- Use `ApplicationService` or `BaseService` pattern if the project defines one.

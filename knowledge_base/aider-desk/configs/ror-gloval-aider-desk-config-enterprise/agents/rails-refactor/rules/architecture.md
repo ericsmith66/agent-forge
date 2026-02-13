@@ -1,5 +1,3 @@
-- Maintain existing boundaries and layering; do not move responsibilities unless required.
-- When extracting services, keep call sites and inputs stable.
-- Add instrumentation where missing, without changing user-visible behavior.
-- Ensure refactors preserve authorization and auditing flows.
-- Keep operational concerns (caching, jobs, metrics) consistent with existing patterns.
+- Keep business logic out of controllers and models where possible.
+- Favor POROs under `app/services` or `app/commands` for orchestration.
+- Don’t add new gems without explicit approval.

@@ -12,7 +12,7 @@ description: Utility-first styling for Rails views and components with Tailwind 
 - Prefer Tailwind utility classes over custom CSS
 - Keep class lists readable; extract repeated UI into partials/components
 - Use the project design tokens and spacing scale
-- Enforce semantic HTML and accessibility attributes
+- Keep templates logic-light; use helpers for formatting
 
 ## Examples
 ```erb

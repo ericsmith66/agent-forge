@@ -1,5 +1,4 @@
 - Prefer Tailwind utility classes over custom CSS.
-- Use DaisyUI components (`btn`, `card`, `alert`, `modal`) for consistent UI.
-- Keep class lists readable; extract repeated UI into components/partials.
-- Enforce semantic HTML and accessibility attributes.
+- Keep class lists readable; extract repeated UI into partials or components.
+- Keep templates logic-light; move formatting to helpers.
 - Use Rails form helpers and consistent error styling.

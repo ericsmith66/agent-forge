@@ -1,4 +1,6 @@
 {
+  "provider": "anthropic",
+  "model": "claude-opus",
   "maxIterations": 10,
   "temperature": 0.4,
   "includeContextFiles": true,

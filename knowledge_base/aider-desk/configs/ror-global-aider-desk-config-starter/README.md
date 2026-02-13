@@ -63,6 +63,25 @@ Provide a **best-practices, global** AiderDesk configuration for Ruby on Rails w
 
 ---
 
+## Model Tiering (Assumed)
+
+This starter assumes three available models ordered by cost/strength:
+
+- **Claude Opus** (most expensive, strongest reasoning)
+- **Claude Sonnet** (balanced)
+- **Qwen3 Coder Next** (least expensive)
+
+Default assignments in this starter:
+
+- `rails-debug` → `claude-opus` (`provider: "anthropic"`)
+- `rails-refactor` → `claude-sonnet` (`provider: "anthropic"`)
+- `rails-greenfield` → `claude-sonnet` (`provider: "anthropic"`)
+- `rails-ui` → `qwen3-coder-next:latest` (`provider: "ollama"`)
+
+> **Note**: Update `provider`/`model` to match your actual providers and model IDs.
+
+---
+
 ## Profile Best Practices
 
 ### 1) Greenfield Profile (`rails-greenfield`)
@@ -72,6 +91,8 @@ Provide a **best-practices, global** AiderDesk configuration for Ruby on Rails w
 **`config.json`**
 ```json
 {
+  "provider": "anthropic",
+  "model": "claude-sonnet",
   "maxIterations": 8,
   "temperature": 0.8,
   "includeContextFiles": true,
@@ -106,6 +127,8 @@ Avoid refactors unless explicitly requested.
 **`config.json`**
 ```json
 {
+  "provider": "anthropic",
+  "model": "claude-sonnet",
   "maxIterations": 16,
   "temperature": 0.7,
   "includeContextFiles": true,
@@ -140,6 +163,8 @@ Update or add tests for changed behavior.
 **`config.json`**
 ```json
 {
+  "provider": "anthropic",
+  "model": "claude-opus",
   "maxIterations": 10,
   "temperature": 0.4,
   "includeContextFiles": true,
@@ -173,6 +198,8 @@ Provide evidence from logs or tests.
 **`config.json`**
 ```json
 {
+  "provider": "ollama",
+  "model": "qwen3-coder-next:latest",
   "maxIterations": 10,
   "temperature": 0.6,
   "includeContextFiles": true,
@@ -197,6 +224,19 @@ Focus on UI/UX changes in Rails views and components.
 Use Tailwind + DaisyUI utilities and Turbo for interactivity.
 Prefer minimal JavaScript and avoid new frontend frameworks unless requested.
 ```
+
+---
+
+## Task Segmentation Guide
+
+Use different profiles based on the kind of work:
+
+- **`rails-greenfield` (Claude Sonnet)**: brand-new controllers, services, components, routes, or features built from scratch.
+- **`rails-refactor` (Claude Sonnet)**: behavior-preserving changes, integration work, migrations, and updates to existing flows.
+- **`rails-debug` (Claude Opus)**: reproduction-first bug fixing, flaky tests, and hard-to-diagnose issues.
+- **`rails-ui` (Qwen3 Coder Next)**: Rails views, Tailwind/DaisyUI styling, and Stimulus/Turbo UI wiring.
+
+If a task spans UI and backend, split it into two tasks and run the appropriate profile for each.
 
 ---
 

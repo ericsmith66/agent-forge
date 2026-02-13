@@ -1,18 +1,17 @@
-# Ruby on Rails Global Agent Config (AiderDesk) — Enterprise
+# Ruby on Rails Global Agent Config (AiderDesk)
 
-> **Audience**: Rails teams using AiderDesk agent profiles + skills at enterprise scale
+> **Audience**: Rails teams using AiderDesk agent profiles + skills
 > **Last updated**: 2026-02-12
 
 ---
 
 ## Goal
 
-Provide a **full best-practices, global** AiderDesk configuration for Ruby on Rails work using **agent profiles** and a **comprehensive skills catalog**. This setup is designed for:
+Provide a **best-practices, global** AiderDesk configuration for Ruby on Rails work using **agent profiles** and **skills**. This setup is designed for:
 
 - **Greenfield** work (new features from scratch)
 - **Refactors** (behavior-preserving improvements)
 - **Debugging** (reproduction-first fixes)
-- **Enterprise constraints** (security, reliability, observability, performance)
 
 ---
 
@@ -52,22 +51,6 @@ Provide a **full best-practices, global** AiderDesk configuration for Ruby on Ra
     │   └── SKILL.md
     ├── rails-error-handling-logging/
     │   └── SKILL.md
-    ├── rails-activerecord-performance/
-    │   └── SKILL.md
-    ├── rails-background-jobs/
-    │   └── SKILL.md
-    ├── rails-api-design/
-    │   └── SKILL.md
-    ├── rails-security/
-    │   └── SKILL.md
-    ├── rails-caching/
-    │   └── SKILL.md
-    ├── rails-testing-strategy/
-    │   └── SKILL.md
-    ├── rails-data-integrity/
-    │   └── SKILL.md
-    ├── rails-observability-metrics/
-    │   └── SKILL.md
     ├── rails-tailwind-ui/
     │   └── SKILL.md
     ├── rails-daisyui-components/
@@ -80,6 +63,25 @@ Provide a **full best-practices, global** AiderDesk configuration for Ruby on Ra
 
 ---
 
+## Model Tiering (Assumed)
+
+This starter assumes three available models ordered by cost/strength:
+
+- **Claude Opus** (most expensive, strongest reasoning)
+- **Claude Sonnet** (balanced)
+- **Qwen3 Coder Next** (least expensive)
+
+Default assignments in this starter:
+
+- `rails-debug` → `claude-opus` (`provider: "anthropic"`)
+- `rails-refactor` → `claude-sonnet` (`provider: "anthropic"`)
+- `rails-greenfield` → `claude-sonnet` (`provider: "anthropic"`)
+- `rails-ui` → `qwen3-coder-next:latest` (`provider: "ollama"`)
+
+> **Note**: Update `provider`/`model` to match your actual providers and model IDs.
+
+---
+
 ## Profile Best Practices
 
 ### 1) Greenfield Profile (`rails-greenfield`)
@@ -89,7 +91,9 @@ Provide a **full best-practices, global** AiderDesk configuration for Ruby on Ra
 **`config.json`**
 ```json
 {
-  "maxIterations": 10,
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 8,
   "temperature": 0.8,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -103,7 +107,7 @@ Provide a **full best-practices, global** AiderDesk configuration for Ruby on Ra
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested. Align with enterprise security and observability defaults."
+  "customInstructions": "Create new files from scratch. Prefer whole-file edits. Avoid refactors unless explicitly requested."
 }
 ```
 
@@ -112,7 +116,6 @@ Provide a **full best-practices, global** AiderDesk configuration for Ruby on Ra
 Create new files from scratch.
 Prefer whole-file edits.
 Avoid refactors unless explicitly requested.
-Apply enterprise defaults for security, observability, and testing.
 ```
 
 ---
@@ -124,7 +127,9 @@ Apply enterprise defaults for security, observability, and testing.
 **`config.json`**
 ```json
 {
-  "maxIterations": 18,
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 16,
   "temperature": 0.7,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -138,7 +143,7 @@ Apply enterprise defaults for security, observability, and testing.
     "todo": "Always",
     "skills": "Always"
   },
-  "customInstructions": "Preserve behavior. Prefer minimal diffs. Update or add tests for changed behavior. Maintain production-safe rollouts and observability."
+  "customInstructions": "Preserve behavior. Prefer minimal diffs. Update or add tests for changed behavior."
 }
 ```
 
@@ -147,19 +152,20 @@ Apply enterprise defaults for security, observability, and testing.
 Preserve behavior.
 Prefer minimal diffs.
 Update or add tests for changed behavior.
-Maintain production-safe rollouts and observability.
 ```
 
 ---
 
 ### 3) Debug Profile (`rails-debug`)
 
-**Intent**: Reproduce first, then fix with evidence.
+**Intent**: Reproduce first, collect evidence, then fix.
 
 **`config.json`**
 ```json
 {
-  "maxIterations": 12,
+  "provider": "anthropic",
+  "model": "claude-opus",
+  "maxIterations": 10,
   "temperature": 0.4,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -173,27 +179,28 @@ Maintain production-safe rollouts and observability.
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Reproduce first, then fix. Provide evidence from logs/tests. Add guardrails to prevent regressions."
+  "customInstructions": "Reproduce first, then fix. Provide evidence from logs or tests."
 }
 ```
 
 **`rules/custom-instructions.md`**
 ```
 Reproduce first, then fix.
-Provide evidence from logs/tests.
-Add guardrails to prevent regressions.
+Provide evidence from logs or tests.
 ```
 
 ---
 
 ### 4) UI Profile (`rails-ui`)
 
-**Intent**: Deliver enterprise-grade UI with Tailwind, DaisyUI, and Turbo.
+**Intent**: Build and refine Rails UI using Tailwind, DaisyUI, and Turbo.
 
 **`config.json`**
 ```json
 {
-  "maxIterations": 12,
+  "provider": "ollama",
+  "model": "qwen3-coder-next:latest",
+  "maxIterations": 10,
   "temperature": 0.6,
   "includeContextFiles": true,
   "includeRepoMap": true,
@@ -207,43 +214,126 @@ Add guardrails to prevent regressions.
     "todo": "Never",
     "skills": "Always"
   },
-  "customInstructions": "Focus on UI/UX in Rails views and components. Use Tailwind + DaisyUI utilities and Turbo for interactivity. Enforce accessibility, responsive design, and i18n-friendly markup. Avoid introducing new frontend frameworks unless requested."
+  "customInstructions": "Focus on UI/UX changes in Rails views and components. Use Tailwind + DaisyUI utilities and Turbo for interactivity. Prefer minimal JavaScript and avoid new frontend frameworks unless requested."
 }
 ```
 
 **`rules/custom-instructions.md`**
 ```
-Focus on UI/UX in Rails views and components.
+Focus on UI/UX changes in Rails views and components.
 Use Tailwind + DaisyUI utilities and Turbo for interactivity.
-Enforce accessibility, responsive design, and i18n-friendly markup.
-Avoid introducing new frontend frameworks unless requested.
+Prefer minimal JavaScript and avoid new frontend frameworks unless requested.
 ```
 
 ---
 
-## Skill Catalog (Enterprise)
+## Task Segmentation Guide
 
-Each skill follows the same template with **When to use**, **Required conventions**, **Examples**, and **Do/Don’t** guidance.
+Use different profiles based on the kind of work:
 
+- **`rails-greenfield` (Claude Sonnet)**: brand-new controllers, services, components, routes, or features built from scratch.
+- **`rails-refactor` (Claude Sonnet)**: behavior-preserving changes, integration work, migrations, and updates to existing flows.
+- **`rails-debug` (Claude Opus)**: reproduction-first bug fixing, flaky tests, and hard-to-diagnose issues.
+- **`rails-ui` (Qwen3 Coder Next)**: Rails views, Tailwind/DaisyUI styling, and Stimulus/Turbo UI wiring.
+
+If a task spans UI and backend, split it into two tasks and run the appropriate profile for each.
+
+---
+
+## Shared Rails Rules (Recommended)
+
+Place shared conventions in each profile’s `rules/` directory:
+
+### `rules/coding-standards.md`
+- Prefer `rubocop`-friendly formatting.
+- Use `frozen_string_literal: true` only when already present in the file.
+- Keep methods short; extract service objects for complex flows.
+- Use `ApplicationService` or `BaseService` pattern if the project defines one.
+
+### `rules/architecture.md`
+- Keep business logic out of controllers and models where possible.
+- Favor POROs under `app/services` or `app/commands` for orchestration.
+- Don’t add new gems without explicit approval.
+
+---
+
+## Skills (Rails Playbooks)
+
+Skills are loaded **on demand** and only work when `useSkillsTools: true`.
+
+### Skill Structure
+```
+~/.aider-desk/skills/<skill-id>/
+└── SKILL.md
+```
+
+### Skill Template (example)
+```markdown
+---
+name: Rails Service Patterns
+description: Service objects, orchestration, and transaction boundaries for Rails.
+---
+
+## When to use
+- Adding non-trivial business logic
+- Coordinating multiple models or side effects
+
+## Required conventions
+- Service classes under `app/services`
+- Single public `call` method
+- Inputs validated at initialization
+
+## Examples
+```ruby
+class Payments::CaptureCharge
+  def initialize(order)
+    @order = order
+  end
+
+  def call
+    ActiveRecord::Base.transaction do
+      # ...
+    end
+  end
+end
+```
+
+## Do / Don’t
+**Do**:
+- Keep services small and focused
+- Return structured results (success/failure)
+
+**Don’t**:
+- Hide side effects in model callbacks
+- Mix HTTP concerns into services
+```
+
+### Recommended Rails Skills
 - `rails-service-patterns`
 - `rails-rspec-webmock`
 - `rails-error-handling-logging`
-- `rails-activerecord-performance`
-- `rails-background-jobs`
-- `rails-api-design`
-- `rails-security`
-- `rails-caching`
-- `rails-testing-strategy`
-- `rails-data-integrity`
-- `rails-observability-metrics`
 - `rails-tailwind-ui`
 - `rails-daisyui-components`
 - `rails-turbo-hotwire`
 
 ---
 
-## Notes for Enterprise Teams
+## Operational Notes
 
-- Keep rules **project-specific**: encode naming conventions, architectural boundaries, and security requirements in the profile rules.
-- Use skills to enforce **cross-cutting concerns** like observability, performance, and data integrity.
-- Prefer **explicit rollouts**: add migrations safely, use feature flags when needed, and include rollback instructions in PRs.
+- **Profiles are hierarchical**: project-level profiles override globals with the same ID.
+- **Skills are opt-in**: they won’t load unless the active profile enables `useSkillsTools`.
+- **Tool approvals**: set to `Ask` for safety on Power Tools in shared environments.
+
+---
+
+## Quick Checklist
+
+- [ ] Create the three profiles under `~/.aider-desk/agents/`
+- [ ] Add `config.json` + `rules/` per profile
+- [ ] Create Rails skills under `~/.aider-desk/skills/`
+- [ ] Ensure profiles have `useSkillsTools: true`
+- [ ] Confirm your active task uses the intended profile
+
+---
+
+**End of Rails Global Config Guide**

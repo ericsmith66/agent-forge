@@ -1,4 +1,4 @@
-- Keep changes minimal and scoped to the defect.
-- Add explicit error handling and logging for the failing path.
-- Prefer test-first reproduction and a focused regression test.
-- Avoid broad refactors while debugging.
+- Prefer `rubocop`-friendly formatting.
+- Use `frozen_string_literal: true` only when already present in the file.
+- Keep methods short; extract service objects for complex flows.
+- Use `ApplicationService` or `BaseService` pattern if the project defines one.

@@ -1,4 +1,6 @@
 {
+  "provider": "anthropic",
+  "model": "claude-sonnet",
   "maxIterations": 16,
   "temperature": 0.7,
   "includeContextFiles": true,
