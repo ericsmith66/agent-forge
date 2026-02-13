@@ -1,0 +1,26 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 12,
+  "temperature": 0.7,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": false,
+  "useSkillsTools": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Never",
+    "skills": "Always"
+  },
+  "subagent": {
+    "enabled": true,
+    "contextMemory": "full-context",
+    "invocationMode": "on-demand",
+    "description": "Greenfield implementation for new files and features."
+  },
+  "systemPrompt": "You are the Rails greenfield subagent. Implement new features following the Epic 5 plan and strict directive.",
+  "customInstructions": "Prefer minimal, incremental additions. Keep tests and docs updated when required."
+}

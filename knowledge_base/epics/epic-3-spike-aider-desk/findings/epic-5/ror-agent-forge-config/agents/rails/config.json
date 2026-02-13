@@ -1,0 +1,21 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet",
+  "maxIterations": 10,
+  "temperature": 0.7,
+  "includeContextFiles": true,
+  "includeRepoMap": true,
+  "useAiderTools": true,
+  "usePowerTools": true,
+  "useTodoTools": false,
+  "useSkillsTools": true,
+  "useSubagents": true,
+  "toolApprovals": {
+    "aider": "Always",
+    "power": "Ask",
+    "todo": "Never",
+    "skills": "Always",
+    "subagents---run_task": "Ask"
+  },
+  "customInstructions": "Primary Rails lead agent for Epic 5. Follow the strict directive and delegate specialized tasks to subagents when appropriate."
+}
