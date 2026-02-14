@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# This script resets the database to a clean state using the schema.
+# Use this between model runs for Epic 5 to ensure a clean 'apples-to-apples' comparison.
+
+def run(cmd)
+  puts "== Running: #{cmd} =="
+  system(cmd) || exit(1)
+end
+
+Dir.chdir(File.expand_path('..', __dir__)) do
+  puts "Cleaning up database for Epic 5 testing..."
+  
+  # Ensure we are in the correct environment
+  env = ENV['RAILS_ENV'] || 'development'
+  puts "Environment: #{env}"
+
+  # Run the reset sequence
+  run "bin/rails db:drop"
+  run "bin/rails db:create"
+  run "bin/rails db:schema:load"
+  
+  # Optional: Seed if necessary
+  # run "bin/rails db:seed"
+
+  puts "== Database Reset Complete =="
+end

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "contextMessages": [],
+  "contextFiles": [
+    {
+      "path": "knowledge_base/epics/EPIC-0005-MULTI-MODEL-COMPARISON/results/junie-vs-claude-comparison-report.md",
+      "readOnly": false
+    }
+  ]
+}

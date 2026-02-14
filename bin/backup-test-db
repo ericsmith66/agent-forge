@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# This script dumps the development and test databases and saves them to a central location.
+# Usage: bin/backup-test-db <model_name>
+
+model_name = ARGV[0]
+if model_name.nil?
+  puts "Usage: bin/backup-test-db <model_name> (e.g. junie, claude, qwen)"
+  exit 1
+end
+
+project_root = File.expand_path('..', __dir__)
+project_name = File.basename(project_root)
+backup_root = File.expand_path('../knowledge_base/epics/EPIC-0005-MULTI-MODEL-COMPARISON/backups', project_root)
+
+# If we are running from a sub-project, the relative path might be different
+unless Dir.exist?(backup_root)
+  backup_root = File.expand_path('../../knowledge_base/epics/EPIC-0005-MULTI-MODEL-COMPARISON/backups', project_root)
+end
+
+unless Dir.exist?(backup_root)
+  puts "Error: Backup directory not found at #{backup_root}"
+  exit 1
+end
+
+def run(cmd)
+  puts "== Running: #{cmd} =="
+  system(cmd) || exit(1)
+end
+
+Dir.chdir(project_root) do
+  require 'yaml'
+  require 'erb'
+
+  # Load database config. Use unsafe_load or aliases: true to handle YAML aliases common in database.yml
+  db_yml_path = 'config/database.yml'
+  raw_config = File.read(db_yml_path)
+  # Handle ERB if present
+  erb_config = ERB.new(raw_config).result
+  
+  full_config = if YAML.respond_to?(:unsafe_load)
+                  YAML.unsafe_load(erb_config)
+                else
+                  YAML.load(erb_config, aliases: true)
+                end
+  
+  # We want to back up development and test
+  ['development', 'test'].each do |env|
+    db_config = full_config[env]
+    unless db_config
+      puts "Warning: No database config found for environment '#{env}'. Skipping."
+      next
+    end
+
+    db_name = db_config['database']
+    db_user = db_config['username'] || `whoami`.strip
+    timestamp = Time.now.strftime('%Y%m%d_%H%M%S')
+    backup_file = File.join(backup_root, "#{project_name}_#{model_name}_#{env}_#{timestamp}.sql")
+
+    puts "Backing up '#{env}' database '#{db_name}' to '#{backup_file}'..."
+    
+    # Perform pg_dump
+    run "pg_dump -U #{db_user} -d #{db_name} -O -x --no-owner --no-privileges > #{backup_file}"
+    puts "Done: #{backup_file}"
+  end
+
+  puts "== All Backups Complete =="
+end

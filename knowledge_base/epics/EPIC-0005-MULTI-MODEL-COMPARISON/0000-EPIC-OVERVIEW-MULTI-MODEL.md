@@ -27,6 +27,8 @@ This epic validates the "Agent-Forge" meta-framework's ability to orchestrate an
 - **Isolation:** Models MUST work on separate branches (`epic-5/junie`, `epic-5/claude`, `epic-5/qwen`).
 - **Standardization:** All models must use the same `ror-agent-forge-config` shared library.
 - **Project Scope:** Implementation is restricted to `projects/eureka-homekit`.
+- **Database State:** The database MUST be reset using `bin/reset-test-db` before each model's first PRD run to ensure an identical baseline.
+- **Database Backup:** After each model completes its full PRD sequence, both the **development** and **test** databases MUST be backed up using `bin/backup-test-db <model_name>` to the central `backups/` directory for later synthesis.
 
 **Testing**
 - **Strict Mandate:** 100% RSpec/Minitest coverage for all new services and controllers.
